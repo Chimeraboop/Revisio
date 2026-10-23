@@ -296,15 +296,33 @@ pub fn etat_photos(etat: State<Etat>) -> photos::EtatSurveillance {
     photos::etat_surveillance(&etat)
 }
 
-/// Dossiers Google Drive synchronisés trouvés sur ce PC (« Mon Drive » sur un lecteur).
+/// Dossiers « Mon Drive » de Google Drive pour ordinateur trouvés sur ce PC : un lecteur
+/// (G:, H:…) sous Windows, `~/Library/CloudStorage/GoogleDrive-…` sous macOS.
 #[tauri::command]
 pub fn dossiers_drive() -> Vec<String> {
-    let mut trouves = Vec::new();
+    let mut racines: Vec<std::path::PathBuf> = Vec::new();
+    #[cfg(windows)]
     for lettre in 'D'..='Z' {
+        racines.push(format!("{lettre}:\\").into());
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(maison) = std::env::var_os("HOME") {
+        let stockage = Path::new(&maison).join("Library").join("CloudStorage");
+        if let Ok(entrees) = std::fs::read_dir(&stockage) {
+            racines.extend(
+                entrees
+                    .filter_map(Result::ok)
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("GoogleDrive"))
+                    .map(|e| e.path()),
+            );
+        }
+    }
+    let mut trouves = Vec::new();
+    for racine in racines {
         for nom in ["Mon Drive", "My Drive"] {
-            let p = format!("{lettre}:\\{nom}");
-            if Path::new(&p).is_dir() {
-                trouves.push(p);
+            let p = racine.join(nom);
+            if p.is_dir() {
+                trouves.push(p.to_string_lossy().into_owned());
             }
         }
     }
@@ -540,7 +558,7 @@ pub async fn enregistrer_cle_ia(etat: State<'_, Etat>, cle: String) -> Result<St
     match etat.ia.verifier_cle(&cle).await {
         Ok(()) => {
             etat.ia.enregistrer_cle(&cle)?;
-            Ok("Clé vérifiée et enregistrée dans le Gestionnaire d'identification Windows.".into())
+            Ok(format!("Clé vérifiée et enregistrée dans le {}.", crate::secret::NOM_COFFRE))
         }
         Err(ErreurIa::HorsLigne) => {
             etat.ia.enregistrer_cle(&cle)?;

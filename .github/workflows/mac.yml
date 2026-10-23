@@ -1,0 +1,71 @@
+# Version macOS (expérimentale) : tests puis fabrication du .dmg sur un Mac de GitHub.
+# Lancement à la main (onglet Actions, « Run workflow ») ou à la publication d'une version (étiquette v…).
+# Si une version est indiquée, le .dmg est ajouté à sa page de téléchargement.
+name: Mac
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Étiquette de la version où publier le .dmg (ex. v0.10.0), vide pour seulement tester"
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Tests de l'interface
+        run: npm test
+
+      - name: Tests du cœur Rust
+        run: |
+          npm run build
+          cd src-tauri && cargo test
+
+      - name: Fabrication de l'app (puces Apple et Intel)
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+
+      - name: Nom du fichier
+        id: fichier
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SOURCE=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n 1)
+          CIBLE="Revisio_${VERSION}_macOS-experimental.dmg"
+          cp "$SOURCE" "$CIBLE"
+          echo "chemin=$CIBLE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revisio-macos
+          path: ${{ steps.fichier.outputs.chemin }}
+
+      - name: Ajout à la page de la version
+        if: github.ref_type == 'tag' || inputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ETIQUETTE: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+        run: gh release upload "$ETIQUETTE" "${{ steps.fichier.outputs.chemin }}" --clobber

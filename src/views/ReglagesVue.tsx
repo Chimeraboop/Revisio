@@ -8,6 +8,7 @@ import ReglagesLocauxVue from "./ReglagesLocauxVue";
 import ReglagesEcritureVue from "./ReglagesEcritureVue";
 import ChoixVault from "./ChoixVault";
 import { useState } from "react";
+import { NOM_SYSTEME } from "../lib/plateforme";
 
 interface Props {
   reglages: Reglages;
@@ -78,7 +79,7 @@ export default function ReglagesVue({ reglages, infos, onChange }: Props) {
         <label className="rangee">
           Thème
           <select value={reglages.theme} onChange={(e) => changerTheme(e.target.value as Theme)}>
-            <option value="systeme">Comme Windows</option>
+            <option value="systeme">Comme {NOM_SYSTEME}</option>
             <option value="clair">Clair</option>
             <option value="sombre">Sombre</option>
           </select>

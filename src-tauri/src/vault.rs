@@ -6,6 +6,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::Read;
+#[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
@@ -24,6 +25,7 @@ const TAILLE_MAX: u64 = 50 * 1024 * 1024;
 
 /// Partage Windows : on laisse Obsidian et OneDrive lire, modifier ou supprimer
 /// le fichier pendant qu'on le lit (on ne le verrouille jamais).
+#[cfg(windows)]
 const PARTAGE_TOTAL: u32 = 0x1 | 0x2 | 0x4; // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,12 +129,13 @@ pub fn lire_octets(racine: &Path, chemin_relatif: &str) -> Result<Vec<u8>, Strin
 }
 
 /// Ouverture en lecture seule : seul `read(true)` est activé.
+/// (Sous macOS, un fichier ouvert ne bloque jamais les autres programmes.)
 fn ouvrir_en_lecture_seule(chemin: &Path) -> Result<File, String> {
-    OpenOptions::new()
-        .read(true)
-        .share_mode(PARTAGE_TOTAL)
-        .open(chemin)
-        .map_err(|e| format!("Ouverture impossible de {} : {e}", chemin.display()))
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    options.share_mode(PARTAGE_TOTAL);
+    options.open(chemin).map_err(|e| format!("Ouverture impossible de {} : {e}", chemin.display()))
 }
 
 /// Transforme un chemin relatif venant de l'interface en chemin absolu,
@@ -211,18 +214,19 @@ mod tests {
 
     #[test]
     fn changements_ignores_hors_notes() {
-        let racine = Path::new(r"C:\vault");
-        assert!(concerne_les_notes(racine, Path::new(r"C:\vault\Spé SVT\Note.md")));
-        assert!(!concerne_les_notes(racine, Path::new(r"C:\vault\.obsidian\workspace.json")));
-        assert!(!concerne_les_notes(racine, Path::new(r"C:\vault\.git\index")));
-        assert!(!concerne_les_notes(racine, Path::new(r"C:\autre\Note.md")));
+        let racine = std::env::temp_dir().join("vault");
+        assert!(concerne_les_notes(&racine, &racine.join("Spé SVT").join("Note.md")));
+        assert!(!concerne_les_notes(&racine, &racine.join(".obsidian").join("workspace.json")));
+        assert!(!concerne_les_notes(&racine, &racine.join(".git").join("index")));
+        assert!(!concerne_les_notes(&racine, &std::env::temp_dir().join("autre").join("Note.md")));
     }
 
     #[test]
     fn refuse_les_chemins_qui_sortent_du_vault() {
         let racine = std::env::temp_dir();
         assert!(chemin_sur(&racine, "../secret.txt").is_err());
-        assert!(chemin_sur(&racine, r"C:\Windows\win.ini").is_err());
+        let absolu = if cfg!(windows) { r"C:\Windows\win.ini" } else { "/etc/hosts" };
+        assert!(chemin_sur(&racine, absolu).is_err());
         assert!(chemin_sur(&racine, "dossier/note.md").is_ok());
     }
 }

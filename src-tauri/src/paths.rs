@@ -6,17 +6,29 @@
 
 use std::path::{Component, Path, PathBuf};
 
-/// Nom du dossier dans %APPDATA% (sans accent pour éviter tout souci de chemin).
+/// Nom du dossier des données (sans accent pour éviter tout souci de chemin).
 pub const NOM_DOSSIER_APP: &str = "Revisio";
 
-/// `%APPDATA%\Revisio`, ou le dossier indiqué par la variable d'environnement
-/// `REVISIO_DOSSIER_DONNEES` (utilisée pour tester l'app sans toucher aux vraies données).
+/// Dossier où les applications rangent leurs données : `%APPDATA%` sous Windows,
+/// `~/Library/Application Support` sous macOS.
+pub fn dossier_applications() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    let dossier = std::env::var_os("APPDATA").map(PathBuf::from).ok_or("La variable APPDATA est introuvable.");
+    #[cfg(target_os = "macos")]
+    let dossier = std::env::var_os("HOME")
+        .map(|h| PathBuf::from(h).join("Library").join("Application Support"))
+        .ok_or("La variable HOME est introuvable.");
+    dossier.map_err(String::from)
+}
+
+/// `%APPDATA%\Revisio` (Windows) ou `~/Library/Application Support/Revisio` (macOS), ou le dossier
+/// indiqué par la variable d'environnement `REVISIO_DOSSIER_DONNEES` (pour tester l'app sans
+/// toucher aux vraies données).
 pub fn dossier_donnees_par_defaut() -> Result<PathBuf, String> {
     if let Some(dossier) = std::env::var_os("REVISIO_DOSSIER_DONNEES").filter(|d| !d.is_empty()) {
         return Ok(PathBuf::from(dossier));
     }
-    let appdata = std::env::var_os("APPDATA").ok_or("La variable APPDATA est introuvable.")?;
-    Ok(PathBuf::from(appdata).join(NOM_DOSSIER_APP))
+    Ok(dossier_applications()?.join(NOM_DOSSIER_APP))
 }
 
 /// Chemin absolu « propre », comparable même si le fichier (ou ses dossiers) n'existe pas encore :
@@ -69,6 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)]
     fn detecte_un_chemin_dans_le_vault() {
         let vault = Path::new(r"C:\Coffre\MonVault");
         assert!(est_dans(Path::new(r"C:\Coffre\MonVault\Maths\note.md"), vault));
@@ -79,6 +92,18 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
+    fn detecte_un_chemin_dans_le_vault_mac() {
+        let vault = Path::new("/Users/moi/Coffre/MonVault");
+        assert!(est_dans(Path::new("/Users/moi/Coffre/MonVault/Maths/note.md"), vault));
+        assert!(est_dans(Path::new("/Users/moi/Coffre/MONVAULT/x.md"), vault));
+        assert!(!est_dans(Path::new("/Users/moi/Coffre/MonVault-copie/x.md"), vault));
+        assert!(!est_dans(Path::new("/Users/moi/Library/Application Support/Revisio/app.db"), vault));
+        assert!(verifier_hors_vault(Path::new("/Users/moi/Coffre/MonVault/a.json"), Some(vault)).is_err());
+    }
+
+    #[test]
+    #[cfg(windows)]
     fn refuse_une_ecriture_dans_le_vault() {
         let vault = Path::new(r"C:\Coffre\MonVault");
         assert!(verifier_hors_vault(Path::new(r"C:\Coffre\MonVault\a.json"), Some(vault)).is_err());

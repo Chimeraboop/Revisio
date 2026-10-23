@@ -5,6 +5,7 @@ import katex from "katex";
 import { api, messageErreur, ResultatRecherche, Statistiques } from "../lib/api";
 import { latexEnTexte, TexteMaths } from "../revision/symboles";
 import { BADGES } from "./ArbreNotes";
+import { TOUCHE_COMMANDE } from "../lib/plateforme";
 
 interface Props {
   onOuvrir: (chemin: string, ancre?: string | null) => void;
@@ -127,7 +128,7 @@ export default function RechercheVue({ onOuvrir, texte, onTexte }: Props) {
       </div>
       <p className="texte-doux petit">
         Accents et majuscules ignorés · début de mot suffisant · <kbd>↑</kbd> <kbd>↓</kbd> puis <kbd>Entrée</kbd> pour
-        ouvrir · <kbd>Ctrl K</kbd> depuis n'importe où
+        ouvrir · <kbd>{TOUCHE_COMMANDE} K</kbd> depuis n'importe où
       </p>
 
       {erreur && <p className="message-erreur">{erreur}</p>}

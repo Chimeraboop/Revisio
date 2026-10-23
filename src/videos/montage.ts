@@ -243,7 +243,7 @@ export async function monterVideo(video: Video, wav: ArrayBuffer, progression: (
         choix = { format: "webm", video: codec, audio: "opus", qualiteAudio: audio(48_000).quality };
     }
   }
-  if (!choix) throw new Error("L'encodeur vidéo de WebView2 n'est pas disponible sur ce PC.");
+  if (!choix) throw new Error("L'encodeur vidéo du système n'est pas disponible sur cet ordinateur.");
 
   const images = await chargerImages(video.diapos);
   const contexteAudio = new OfflineAudioContext({ numberOfChannels: 1, length: 1, sampleRate: FREQUENCE_AUDIO });

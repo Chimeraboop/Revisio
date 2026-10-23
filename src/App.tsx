@@ -42,6 +42,7 @@ import RechercheVue from "./views/RechercheVue";
 import VideosVue from "./views/VideosVue";
 import ReviserVue, { DemandeSeance } from "./views/ReviserVue";
 import ReglagesVue from "./views/ReglagesVue";
+import { TOUCHE_COMMANDE, toucheCommande } from "./lib/plateforme";
 
 type Vue =
   | "accueil"
@@ -66,7 +67,7 @@ interface LienNav {
   icone: LucideIcon;
 }
 
-/** Menu de gauche, par groupes (la recherche est dans la barre du haut : Ctrl K). */
+/** Menu de gauche, par groupes (la recherche est dans la barre du haut : Ctrl K, ou ⌘ K sur Mac). */
 const NAVIGATION: { groupe: string; liens: LienNav[] }[] = [
   {
     groupe: "Réviser",
@@ -187,7 +188,7 @@ export default function App() {
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
         revenir();
-      } else if (e.ctrlKey && e.key.toLowerCase() === "k") {
+      } else if (toucheCommande(e) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setVue("recherche");
       }
@@ -253,7 +254,7 @@ export default function App() {
           <button className="recherche-rapide" onClick={() => setVue("recherche")}>
             <Search className="icone" size={16} aria-hidden />
             <span>Rechercher dans tes notes…</span>
-            <kbd>Ctrl K</kbd>
+            <kbd>{TOUCHE_COMMANDE} K</kbd>
           </button>
           <div className="etats-haut">
             <IndicateurTaches onOuvrir={setVue} />

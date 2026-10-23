@@ -172,11 +172,12 @@ pub struct VaultDetecte {
     pub nom: String,
 }
 
-/// Vaults ouverts récemment dans Obsidian, lus (sans jamais l'écrire) dans
-/// `%APPDATA%\obsidian\obsidian.json`. Ne garde que les dossiers qui existent encore.
+/// Vaults ouverts récemment dans Obsidian, lus (sans jamais l'écrire) dans `obsidian.json`
+/// (`%APPDATA%\obsidian` sous Windows, `~/Library/Application Support/obsidian` sous macOS).
+/// Ne garde que les dossiers qui existent encore.
 pub fn vaults_obsidian() -> Vec<VaultDetecte> {
-    let Some(appdata) = std::env::var_os("APPDATA") else { return Vec::new() };
-    let Ok(texte) = std::fs::read_to_string(Path::new(&appdata).join("obsidian").join("obsidian.json")) else {
+    let Ok(applications) = crate::paths::dossier_applications() else { return Vec::new() };
+    let Ok(texte) = std::fs::read_to_string(applications.join("obsidian").join("obsidian.json")) else {
         return Vec::new();
     };
     chemins_obsidian(&texte)
@@ -259,7 +260,8 @@ mod tests {
 
     #[test]
     fn nom_du_vault_pour_obsidian() {
-        let mut r = Reglages { chemin_vault: Some(r"D:\Notes\Mon vault".into()), ..Default::default() };
+        let vault = std::env::temp_dir().join("Mon vault");
+        let mut r = Reglages { chemin_vault: Some(vault.to_string_lossy().into()), ..Default::default() };
         assert_eq!(r.nom_obsidian(), "Mon vault");
         r.nom_vault_obsidian = "autre".into();
         assert_eq!(r.nom_obsidian(), "autre");

@@ -28,11 +28,17 @@ yaml-rust2 = "0.13.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 notify-debouncer-full = "0.7.0"
 keyring-core = "1"
-windows-native-keyring-store = "1.1.0"
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
 tokio = { version = "1", features = ["time", "sync", "macros"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+# Coffre à secrets du système pour la clé Gemini.
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = "1.1.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 
 [profile.release]
 codegen-units = 1

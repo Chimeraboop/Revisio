@@ -18,6 +18,7 @@ import { useIndexation } from "../lib/indexation";
 import Message from "../composants/Message";
 import ChoixVault from "./ChoixVault";
 import { DossierSurveille } from "./PhotosVue";
+import { NOM_COFFRE } from "../lib/plateforme";
 
 interface Props {
   reglages: Reglages;
@@ -255,7 +256,7 @@ function EtapeCle({ etatIa, onChange }: { etatIa: EtatIa | null; onChange: () =>
         ))}
 
       <p className="texte-doux petit">
-        Ta clé est rangée dans le Gestionnaire d'identification de Windows, jamais dans un fichier. Avec le niveau
+        Ta clé est rangée dans le {NOM_COFFRE}, jamais dans un fichier. Avec le niveau
         gratuit, Google peut utiliser les extraits de cours envoyés pour améliorer ses produits ; ta clé et tes
         statistiques ne sont jamais envoyées.
       </p>
@@ -330,7 +331,7 @@ function Recapitulatif({ reglages, etatIa }: { reglages: Reglages; etatIa: EtatI
           <span>
             <strong>Gemini</strong>
             {etatIa?.clePresente
-              ? "Clé enregistrée dans Windows."
+              ? `Clé enregistrée dans le ${NOM_COFFRE}.`
               : "Pas de clé pour l'instant. Tu pourras l'ajouter dans Réglages, Intelligence artificielle."}
           </span>
         </li>

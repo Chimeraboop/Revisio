@@ -1,5 +1,5 @@
-//! Clé API Gemini, rangée dans le Gestionnaire d'identification Windows
-//! (« Informations d'identification Windows »). Elle n'est jamais écrite dans un fichier
+//! Clé API Gemini, rangée dans le coffre à secrets du système : le Gestionnaire d'identification
+//! sous Windows, le Trousseau sous macOS. Elle n'est jamais écrite dans un fichier
 //! et ne passe jamais par l'interface : seul ce module la lit.
 
 use std::sync::Once;
@@ -9,14 +9,28 @@ use keyring_core::{Entry, Error};
 const SERVICE: &str = "Revisio";
 const COMPTE: &str = "cle-api-gemini";
 
+/// Nom du coffre à secrets, pour les messages.
+#[cfg(windows)]
+pub const NOM_COFFRE: &str = "Gestionnaire d'identification Windows";
+#[cfg(target_os = "macos")]
+pub const NOM_COFFRE: &str = "Trousseau de macOS";
+#[cfg(not(any(windows, target_os = "macos")))]
+compile_error!("Révisio fonctionne sous Windows et macOS seulement.");
+
 static INITIALISATION: Once = Once::new();
 
 fn entree() -> Result<Entry, String> {
-    INITIALISATION.call_once(|| match windows_native_keyring_store::Store::new() {
-        Ok(store) => keyring_core::set_default_store(store),
-        Err(e) => eprintln!("Gestionnaire d'identification Windows indisponible : {e}"),
+    INITIALISATION.call_once(|| {
+        #[cfg(windows)]
+        let store = windows_native_keyring_store::Store::new();
+        #[cfg(target_os = "macos")]
+        let store = apple_native_keyring_store::keychain::Store::new();
+        match store {
+            Ok(store) => keyring_core::set_default_store(store),
+            Err(e) => eprintln!("{NOM_COFFRE} indisponible : {e}"),
+        }
     });
-    Entry::new(SERVICE, COMPTE).map_err(|e| format!("Gestionnaire d'identification Windows : {e}"))
+    Entry::new(SERVICE, COMPTE).map_err(|e| format!("{NOM_COFFRE} : {e}"))
 }
 
 pub fn enregistrer_cle(cle: &str) -> Result<(), String> {

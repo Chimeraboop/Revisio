@@ -2,6 +2,7 @@ import { ArrowLeft, BookOpen } from "lucide-react";
 import { EtatIndexation } from "../lib/api";
 import ArbreNotes from "./ArbreNotes";
 import LecteurNote from "./LecteurNote";
+import { TOUCHE_ALT } from "../lib/plateforme";
 
 interface Props {
   chemin: string | null;
@@ -21,7 +22,7 @@ export default function NotesVue({ chemin, ancre, peutRevenir, onOuvrir, onRetou
       </aside>
       <section className="panneau-note">
         <div className="barre-note">
-          <button className="bouton" disabled={!peutRevenir} onClick={onRetour} title="Retour (Alt + ←)">
+          <button className="bouton" disabled={!peutRevenir} onClick={onRetour} title={`Retour (${TOUCHE_ALT} + ←)`}>
             <ArrowLeft size={15} aria-hidden /> Retour
           </button>
         </div>

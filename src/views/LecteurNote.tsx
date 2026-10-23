@@ -6,6 +6,7 @@ import Dessin from "../excalidraw/Dessin";
 import { extraireScene } from "../excalidraw/scene";
 import { MarkdownObsidian } from "../markdown/rendu";
 import { BADGES } from "./ArbreNotes";
+import { TOUCHE_COMMANDE, toucheCommande } from "../lib/plateforme";
 
 interface Props {
   chemin: string;
@@ -159,7 +160,7 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
                 lang="fr"
                 aria-label="Contenu de la note (Markdown)"
                 onKeyDown={(e) => {
-                  if (e.ctrlKey && e.key.toLowerCase() === "s") {
+                  if (toucheCommande(e) && e.key.toLowerCase() === "s") {
                     e.preventDefault();
                     enregistrer();
                   }
@@ -172,7 +173,7 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
                 <button className="bouton" onClick={() => (setBrouillon(null), setErreurEdition(null))}>
                   <X size={15} aria-hidden /> Fermer sans enregistrer
                 </button>
-                <span className="texte-doux petit">Ctrl S pour enregistrer. Syntaxe Markdown d'Obsidian.</span>
+                <span className="texte-doux petit">{TOUCHE_COMMANDE} S pour enregistrer. Syntaxe Markdown d'Obsidian.</span>
               </div>
             </div>
           ) : note.genre === "schema" ? (

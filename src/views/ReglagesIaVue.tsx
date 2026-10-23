@@ -1,8 +1,9 @@
-// Réglages de l'IA : clé Gemini (rangée par Windows), modèles, limites d'utilisation.
+// Réglages de l'IA : clé Gemini (rangée par le système), modèles, limites d'utilisation.
 import { useEffect, useState } from "react";
 import { CircleCheck, PlugZap, Save, Sparkles, Trash, WifiOff } from "lucide-react";
 import { api, EtatIa, messageErreur, ModeleIa, Reglages, ReglagesIa } from "../lib/api";
 import { useEnLigne } from "../lib/connexion";
+import { NOM_SYSTEME } from "../lib/plateforme";
 
 interface Props {
   reglages: Reglages;
@@ -147,7 +148,7 @@ export default function ReglagesIaVue({ reglages, onChange }: Props) {
           {etat?.clePresente ? (
             <>
               <span className="indicateur">
-                <CircleCheck size={14} className="verdict-juste" aria-hidden /> Enregistrée dans Windows
+                <CircleCheck size={14} className="verdict-juste" aria-hidden /> Enregistrée dans {NOM_SYSTEME}
               </span>
               <button className="bouton" disabled={enCours} onClick={() => action(() => api.supprimerCleIa())}>
                 <Trash size={14} aria-hidden /> Supprimer
