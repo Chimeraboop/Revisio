@@ -162,12 +162,15 @@ const ANTI_REBOND: Duration = Duration::from_millis(1500);
 /// quand une note ou une image change. Les changements dans `.obsidian` etc. sont ignorés.
 pub fn surveiller(racine: &Path, rappel: impl Fn() + Send + 'static) -> Result<Surveillance, String> {
     let racine_ecoutee = racine.to_path_buf();
+    // macOS signale les changements avec le chemin réel (ex. /private/var/… pour /var/…) :
+    // on compare aussi avec la forme résolue du dossier.
+    let racine_reelle = std::fs::canonicalize(racine).unwrap_or_else(|_| racine.to_path_buf());
     let gestionnaire = move |resultat: DebounceEventResult| {
         let Ok(evenements) = resultat else { return };
         let utile = evenements
             .iter()
             .flat_map(|e| e.paths.iter())
-            .any(|p| concerne_les_notes(&racine_ecoutee, p));
+            .any(|p| concerne_les_notes(&racine_ecoutee, p) || concerne_les_notes(&racine_reelle, p));
         if utile {
             rappel();
         }
