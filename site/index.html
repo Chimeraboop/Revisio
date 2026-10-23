@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Révisio — tes notes Obsidian deviennent des révisions</title>
+  <meta name="description" content="Révisio lit ton vault Obsidian, en tire des cartes de révision et te prépare chaque jour une séance sur mesure. Tes photos de cours peuvent même devenir des notes. Pour Windows 10 et 11, hors ligne d'abord.">
+  <meta property="og:title" content="Révisio">
+  <meta property="og:description" content="Tes notes Obsidian deviennent des révisions. Pour Windows, hors ligne d'abord.">
+  <meta property="og:image" content="images/logo-256.png">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="images/logo.png">
+  <link rel="preload" href="fonts/unbounded.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Thème choisi lors d'une visite précédente, posé avant l'affichage (pas d'éclair blanc)
+    try { if (localStorage.getItem("revisio-theme") === "sombre") document.documentElement.dataset.theme = "sombre"; } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="progression-lecture" aria-hidden="true"></div>
+
+  <header class="barre">
+    <a class="marque" href="#haut" aria-label="Révisio, retour en haut">
+      <img src="images/logo.png" alt="" width="32" height="32">
+      <span>Révisio</span>
+    </a>
+    <nav class="liens" aria-label="Sections">
+      <a href="#fonctionnement">Fonctionnement</a>
+      <a href="#photos">Photos</a>
+      <a href="#planning">Planning</a>
+      <a href="#ia">IA</a>
+      <a href="#confidentialite">Confidentialité</a>
+    </nav>
+    <button class="bascule-theme" type="button" aria-pressed="false" aria-label="Thème sombre">
+      <svg class="icone lune" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      <svg class="icone soleil" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+    </button>
+    <a class="bouton bouton-petit" href="#telecharger">Télécharger</a>
+  </header>
+
+  <main id="haut">
+    <!-- Accueil -->
+    <section class="accueil">
+      <div class="accueil-texte">
+        <h1 class="titre-geant">
+          <span class="ligne"><span>Tes notes</span></span>
+          <span class="ligne"><span>deviennent</span></span>
+          <span class="ligne"><span>des révisions.</span></span>
+        </h1>
+        <p class="chapeau apparait-chargement" style="--d: 5">
+          Révisio lit ton vault Obsidian, en tire des cartes de révision
+          et te dit chaque jour quoi revoir. Tes photos de cours peuvent même devenir des notes.
+        </p>
+        <div class="actions apparait-chargement" style="--d: 6">
+          <a class="bouton" href="#telecharger">
+            <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            Télécharger pour Windows
+          </a>
+          <a class="bouton bouton-contour" href="#fonctionnement">Voir comment ça marche</a>
+        </div>
+        <p class="note-version apparait-chargement" style="--d: 7">Version 0.10.0, Windows 10 et 11, installation sans droits administrateur.</p>
+      </div>
+
+      <div class="paquet" aria-label="Exemple de carte de vocabulaire : die Erinnerung, le souvenir">
+        <div class="carte-fond carte-fond-2" aria-hidden="true">
+          <span class="carte-genre">Schéma muet</span>
+          <svg viewBox="0 0 200 120" class="mini-schema">
+            <circle cx="60" cy="60" r="38"/><circle cx="140" cy="60" r="38"/>
+            <line x1="60" y1="22" x2="60" y2="8"/><line x1="140" y1="98" x2="140" y2="112"/>
+            <rect x="44" y="0" width="32" height="8" rx="2"/><rect x="124" y="112" width="32" height="8" rx="2"/>
+          </svg>
+        </div>
+        <div class="carte-fond carte-fond-1" aria-hidden="true">
+          <span class="carte-genre">Texte à trous</span>
+          <p>La méiose produit quatre cellules <span class="trou"></span> à partir d'une cellule diploïde.</p>
+        </div>
+        <button class="carte-vocab" type="button" aria-pressed="false" aria-label="Retourner la carte">
+          <span class="face recto">
+            <span class="carte-genre">Allemand → français</span>
+            <span class="mot">die Erinnerung</span>
+            <span class="indice">Clique pour retourner</span>
+          </span>
+          <span class="face verso">
+            <span class="carte-genre">Réponse</span>
+            <span class="mot">le souvenir</span>
+            <span class="notes-fsrs">
+              <span>À revoir</span><span>Difficile</span><span class="choisie">Correct</span><span>Facile</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Bandeau des garanties -->
+    <section class="garanties" aria-label="En bref">
+      <ul>
+        <li>
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span><strong>Lecture seule par défaut</strong> l'écriture se donne, et s'annule en un clic</span>
+        </li>
+        <li>
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/></svg>
+          <span><strong>Hors ligne d'abord</strong> tes séances marchent sans Internet</span>
+        </li>
+        <li>
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          <span><strong>Répétition espacée FSRS</strong> chaque carte revient au bon moment</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Fonctionnement : fenêtre épinglée -->
+    <section class="fonctionnement" id="fonctionnement">
+      <h2 class="titre-section">Du cours à la séance du jour, en quatre étapes.</h2>
+
+      <div class="recit">
+        <ol class="etapes">
+          <li class="etape" data-ecran="0">
+            <span class="numero">1</span>
+            <h3>Tu écris tes cours dans Obsidian, ou tu les prends en photo.</h3>
+            <p>Rien ne change dans tes habitudes. Révisio comprend tes callouts, tes mots en gras, tes listes numérotées, tes listes de vocabulaire et même tes schémas Excalidraw.</p>
+          </li>
+          <li class="etape" data-ecran="1">
+            <span class="numero">2</span>
+            <h3>Révisio en tire des cartes.</h3>
+            <p>Vocabulaire à retourner ou à taper, textes à trous tirés de tes définitions, schémas muets, étapes à remettre dans l'ordre. Chaque carte garde le lien vers sa note.</p>
+          </li>
+          <li class="etape" data-ecran="2">
+            <span class="numero">3</span>
+            <h3>Chaque jour, une séance sur mesure.</h3>
+            <p>Tu dis d'abord si tu es sûr, hésitant ou au hasard, puis tu réponds. Une bonne réponse au hasard revient vite. Une erreur part dans ton carnet, avec l'extrait du cours.</p>
+          </li>
+          <li class="etape" data-ecran="3">
+            <span class="numero">4</span>
+            <h3>Tu vois où tu en es.</h3>
+            <p>Série de jours, maîtrise par matière, temps passé, points faibles. Exporte ta progression en Markdown ou en PDF quand tu veux la montrer.</p>
+          </li>
+        </ol>
+
+        <div class="scene">
+          <div class="fenetre" aria-hidden="true">
+            <div class="fenetre-barre">
+              <img src="images/logo.png" alt="" width="14" height="14">
+              <span>Révisio</span>
+              <span class="fenetre-boutons"><i></i><i></i><i></i></span>
+            </div>
+            <div class="fenetre-corps">
+              <aside class="fenetre-menu">
+                <span class="menu-groupe">Réviser</span>
+                <span class="menu-lien" data-pour="3">Accueil</span>
+                <span class="menu-lien" data-pour="0">Mes notes</span>
+                <span class="menu-lien" data-pour="2">Réviser</span>
+                <span class="menu-lien">Planning</span>
+                <span class="menu-lien" data-pour="1">Mes cartes</span>
+                <span class="menu-groupe">Créer avec l'IA</span>
+                <span class="menu-lien">Atelier IA</span>
+                <span class="menu-lien">Podcasts</span>
+              </aside>
+
+              <div class="ecrans">
+                <!-- 1 : la note -->
+                <div class="ecran" data-ecran="0">
+                  <span class="fil">SVT &rsaquo; Méiose</span>
+                  <h4 class="ecran-titre">La méiose</h4>
+                  <div class="callout">
+                    <span class="callout-titre">Définition</span>
+                    <p>La <b>méiose</b> est une suite de deux divisions qui produit quatre cellules <b>haploïdes</b> à partir d'une cellule <b>diploïde</b>.</p>
+                  </div>
+                  <p class="ecran-texte">Étapes de la première division&nbsp;:</p>
+                  <ol class="ecran-liste">
+                    <li>Prophase I</li><li>Métaphase I</li><li>Anaphase I</li><li>Télophase I</li>
+                  </ol>
+                  <span class="pastille"><svg class="icone" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Lecture seule</span>
+                </div>
+
+                <!-- 2 : les cartes -->
+                <div class="ecran" data-ecran="1">
+                  <h4 class="ecran-titre">Mes cartes</h4>
+                  <ul class="compteurs">
+                    <li><span>Vocabulaire</span><b data-compte="326">0</b></li>
+                    <li><span>Textes à trous</span><b data-compte="227">0</b></li>
+                    <li><span>Schémas muets</span><b data-compte="25">0</b></li>
+                    <li><span>Remise dans l'ordre</span><b data-compte="9">0</b></li>
+                  </ul>
+                  <div class="apercu-carte">
+                    <span class="carte-genre">Texte à trous, tiré de « La méiose »</span>
+                    <p>La méiose produit quatre cellules <span class="trou trou-sombre"></span> à partir d'une cellule diploïde.</p>
+                  </div>
+                </div>
+
+                <!-- 3 : la séance -->
+                <div class="ecran" data-ecran="2">
+                  <div class="seance-haut"><span>Séance du jour</span><span>12 sur 30</span></div>
+                  <div class="barre-seance"><i></i></div>
+                  <p class="seance-question">La méiose produit quatre cellules <span class="trou trou-rempli">haploïdes</span> à partir d'une cellule diploïde.</p>
+                  <div class="segmente"><span class="actif">Sûr</span><span>Hésitant</span><span>Au hasard</span></div>
+                  <div class="reponse-ok"><svg class="icone" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Bonne réponse</div>
+                  <div class="notes-ecran">
+                    <span>À revoir<small>1 min</small></span>
+                    <span>Difficile<small>2 j</small></span>
+                    <span class="choisie">Correct<small>4 j</small></span>
+                    <span>Facile<small>9 j</small></span>
+                  </div>
+                </div>
+
+                <!-- 4 : le tableau de bord -->
+                <div class="ecran" data-ecran="3">
+                  <h4 class="ecran-titre">Bonjour</h4>
+                  <div class="stats">
+                    <div><b>12</b><span>jours de série</span></div>
+                    <div><b>68 %</b><span>maîtrisé</span></div>
+                    <div><b>84 %</b><span>de réussite</span></div>
+                  </div>
+                  <div class="courbe">
+                    <svg viewBox="0 0 300 90" preserveAspectRatio="none">
+                      <path class="courbe-aire" d="M0 70 C30 64 45 50 70 54 S120 30 150 38 S200 18 230 24 S280 8 300 12 L300 90 L0 90Z"/>
+                      <path class="courbe-trait" d="M0 70 C30 64 45 50 70 54 S120 30 150 38 S200 18 230 24 S280 8 300 12"/>
+                    </svg>
+                  </div>
+                  <div class="faible"><span>Point faible</span><b>Méiose, anaphase I</b></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Photos de cours -->
+    <section class="photos" id="photos">
+      <div class="photos-texte">
+        <h2 class="titre-section">Une photo au lycée, une note dans ton vault.</h2>
+        <p>Envoie la photo de ton cours dans un dossier Google Drive depuis ton téléphone. Dès que Révisio la voit, il la lit avec Gemini, reconnaît la matière et le chapitre, et range de petites notes dans le bon dossier, rédigées comme les tiennes.</p>
+        <ul class="photos-points">
+          <li><strong>Une note par notion</strong>, avec tes callouts, tes mots en gras et des liens vers les notes voisines.</li>
+          <li><strong>Une note existante n'est jamais changée sans ton accord</strong> : tu vois ce qui serait ajouté, puis tu acceptes ou tu refuses.</li>
+          <li><strong>Tout s'annule</strong> : chaque écriture est sauvegardée dans un journal, et tu peux corriger une note avec le bouton Modifier.</li>
+        </ul>
+      </div>
+
+      <div class="photos-scene" aria-hidden="true">
+        <div class="photo-cours">
+          <span class="photo-ligne l1"></span>
+          <span class="photo-ligne l2"></span>
+          <span class="photo-ligne l3"></span>
+          <span class="photo-schema"></span>
+          <span class="photo-ligne l4"></span>
+          <span class="photo-ligne l5"></span>
+          <span class="photo-etiquette">IMG_9231.JPG</span>
+        </div>
+        <div class="note-creee">
+          <span class="fil">SVT &rsaquo; Chapitre 4 &rsaquo; Mutations</span>
+          <strong class="note-titre">Les mutations</strong>
+          <div class="callout">
+            <span class="callout-titre">Définition</span>
+            <p>Une <b>mutation</b> est une modification de la séquence de l'ADN.</p>
+          </div>
+          <div class="validation">
+            <span class="validation-titre">Compléter « La méiose » ?</span>
+            <span class="diff-plus">+ Lien vers [[Les mutations]]</span>
+            <span class="validation-boutons"><i class="oui">Accepter</i><i>Refuser</i></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Planning -->
+    <section class="planning" id="planning">
+      <div class="planning-texte">
+        <h2 class="titre-section">Un contrôle dans dix jours&nbsp;? Révisio s'organise.</h2>
+        <p>Ajoute la date de ton évaluation et ses chapitres. Révisio place les plus faibles en premier, prévoit deux passages avant le jour J, une révision générale la veille et un dernier coup d'œil le matin.</p>
+        <p>Le planning se recalcule tout seul après chaque séance&nbsp;: si un chapitre décolle, il laisse la place aux autres.</p>
+      </div>
+
+      <div class="calendrier" aria-label="Exemple de planning sur deux semaines">
+        <div class="cal-entete" aria-hidden="true"><span>lun.</span><span>mar.</span><span>mer.</span><span>jeu.</span><span>ven.</span><span>sam.</span><span>dim.</span></div>
+        <div class="cal-grille">
+          <div class="jour passe"><span class="num">2</span><i class="tag t1">Méiose</i></div>
+          <div class="jour passe"><span class="num">3</span><i class="tag t2">Mutations</i></div>
+          <div class="jour aujourdhui"><span class="num">4</span><i class="tag t3">Brassage</i></div>
+          <div class="jour"><span class="num">5</span><i class="tag t1">Méiose</i></div>
+          <div class="jour"><span class="num">6</span></div>
+          <div class="jour"><span class="num">7</span><i class="tag t2">Mutations</i></div>
+          <div class="jour"><span class="num">8</span></div>
+          <div class="jour"><span class="num">9</span><i class="tag t3">Brassage</i></div>
+          <div class="jour"><span class="num">10</span><i class="tag t1">Méiose</i></div>
+          <div class="jour"><span class="num">11</span><i class="tag t2">Mutations</i></div>
+          <div class="jour"><span class="num">12</span><i class="tag tout">Révision générale</i></div>
+          <div class="jour evaluation"><span class="num">13</span><i class="tag eval">Contrôle de SVT</i></div>
+          <div class="jour"><span class="num">14</span></div>
+          <div class="jour"><span class="num">15</span></div>
+        </div>
+        <div class="legende">
+          <span><i class="tag t1"></i>Méiose</span>
+          <span><i class="tag t2"></i>Mutations</span>
+          <span><i class="tag t3"></i>Brassage</span>
+          <span><i class="tag tout"></i>Révision générale</span>
+          <span><i class="tag eval"></i>Contrôle de SVT</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- IA (fond noir) -->
+    <section class="ia" id="ia">
+      <div class="ia-tete">
+        <h2 class="titre-section">Une IA qui cite tes cours, pas Internet.</h2>
+        <p class="chapeau">Chaque question générée renvoie à la phrase de ta note dont elle vient. Si l'IA invente, Révisio la rejette.</p>
+      </div>
+
+      <div class="ia-corps">
+        <ul class="creations">
+          <li>
+            <button type="button" aria-expanded="true"><span>Questions ancrées</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>QCM et questions ouvertes sur un chapitre. Les réponses ouvertes sont corrigées, avec ce qui manque à ta réponse.</p></div></div>
+          </li>
+          <li>
+            <button type="button" aria-expanded="false"><span>Méthode Feynman</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>Explique un chapitre avec tes mots. Révisio repère les erreurs et les oublis en citant ton cours.</p></div></div>
+          </li>
+          <li>
+            <button type="button" aria-expanded="false"><span>Exercices type bac</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>Sujets par matière, examens blancs chronométrés de 15 minutes à 2 heures. En maths, chaque calcul est vérifié par Révisio lui-même.</p></div></div>
+          </li>
+          <li>
+            <button type="button" aria-expanded="false"><span>Cartes mentales</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>Le plan de ton chapitre, sans IA, ou une carte à trois niveaux dont chaque branche cite un extrait.</p></div></div>
+          </li>
+          <li>
+            <button type="button" aria-expanded="false"><span>Podcasts et vidéos</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>Un dialogue à deux voix à écouter dans le bus, ou une vidéo de révision avec tes schémas, enregistrée en MP4.</p></div></div>
+          </li>
+          <li>
+            <button type="button" aria-expanded="false"><span>Questions sur tes schémas</span><i aria-hidden="true"></i></button>
+            <div class="detail"><div><p>Révisio regarde tes dessins Excalidraw et pose des questions sur chaque légende.</p></div></div>
+          </li>
+        </ul>
+
+        <div class="moteur">
+          <div class="interrupteur" role="group" aria-label="Moteur d'IA">
+            <button type="button" class="actif" data-moteur="en-ligne" aria-pressed="true">En ligne</button>
+            <button type="button" data-moteur="local" aria-pressed="false">Local</button>
+            <span class="curseur" aria-hidden="true"></span>
+          </div>
+          <div class="moteur-texte" aria-live="polite">
+            <div class="moteur-vue actif" data-moteur="en-ligne">
+              <h3>Gemini, avec ta propre clé.</h3>
+              <p>La clé reste dans le Gestionnaire d'identification de Windows et ne passe jamais par l'interface. Les générations tournent en arrière-plan : tu peux changer d'écran ou tout arrêter d'un clic.</p>
+            </div>
+            <div class="moteur-vue" data-moteur="local">
+              <h3>Ollama, sur ton ordinateur.</h3>
+              <p>Rien ne sort de ton PC. Révisio peut aussi passer au modèle local tout seul quand Gemini est indisponible ou que tu n'as plus de connexion.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Confidentialité -->
+    <section class="confidentialite" id="confidentialite">
+      <p class="declaration" data-mots>Ton vault reste en lecture seule tant que tu ne dis pas le contraire. Tes révisions restent sur ton ordinateur. Ta clé reste dans le coffre de Windows.</p>
+
+      <dl class="details-confiance">
+        <div>
+          <dt>Écriture seulement si tu l'autorises</dt>
+          <dd>Désactivée par défaut. Ensuite, chaque écriture est sauvegardée et s'annule en un clic, et jamais dans les réglages d'Obsidian.</dd>
+        </div>
+        <div>
+          <dt>Tes données au même endroit</dt>
+          <dd>Cartes, séances et réglages sont rangés dans <code>%APPDATA%\Revisio</code>. Rien sur un serveur.</dd>
+        </div>
+        <div>
+          <dt>Internet seulement si tu le veux</dt>
+          <dd>Seuls l'IA en ligne, la lecture des photos et l'espace web en ont besoin. Un interrupteur coupe tout en un clic.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- Téléchargement (fond noir) -->
+    <section class="telecharger" id="telecharger">
+      <div class="logo-chrome" aria-hidden="true">
+        <img src="images/logo-256.png" alt="" width="256" height="256">
+        <span class="reflet"></span>
+      </div>
+      <h2 class="titre-section">Commence ta première séance ce soir.</h2>
+      <a class="bouton bouton-grand" href="https://github.com/Chimeraboop/Revisio/releases/latest">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Télécharger Révisio 0.10.0
+      </a>
+      <ul class="prerequis">
+        <li>Windows 10 ou 11, 64 bits</li>
+        <li>Installeur de 7 Mo</li>
+        <li>Sans droits administrateur</li>
+        <li>Un vault Obsidian</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="pied">
+    <span class="marque"><img src="images/logo.png" alt="" width="24" height="24"><span>Révisio</span></span>
+    <span>Pour les lycéens qui prennent leurs cours dans Obsidian.</span>
+    <a href="https://github.com/Chimeraboop/Revisio">Code source sur GitHub</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

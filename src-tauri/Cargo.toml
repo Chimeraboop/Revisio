@@ -1,0 +1,47 @@
+[package]
+name = "revisio"
+version = "0.10.0"
+description = "Révisio — application de révision basée sur un vault Obsidian"
+authors = ["Chimeraboop"]
+license = "MIT"
+edition = "2024"
+
+[lib]
+# Le suffixe `_lib` évite un conflit de nom entre la bibliothèque et l'exécutable sous Windows
+# (voir https://github.com/rust-lang/cargo/issues/8519).
+name = "revisio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["unstable"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+base64 = "0.22"
+serde_json = "1"
+tauri-plugin-dialog = "2"
+regex = "1.13.1"
+walkdir = "2.5.0"
+yaml-rust2 = "0.13.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+notify-debouncer-full = "0.7.0"
+keyring-core = "1"
+windows-native-keyring-store = "1.1.0"
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+tokio = { version = "1", features = ["time", "sync", "macros"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+sha2 = "0.11.1"
+tokio = { version = "1", features = ["time", "sync", "macros", "rt", "test-util"] }
+walkdir = "2.5.0"
