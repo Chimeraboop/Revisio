@@ -1,5 +1,5 @@
 // Guide de démarrage : s'affiche au premier lancement (et depuis les Réglages).
-// Étapes : bienvenue → vault Obsidian → clé Gemini (facultative) → photos de cours (facultatif) → récapitulatif.
+// Étapes : bienvenue → dossier de notes (vault Obsidian, dossier existant ou nouveau) → clé Gemini (facultative) → photos de cours (facultatif) → récapitulatif.
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -115,14 +115,14 @@ function Bienvenue() {
       <img className="logo-image logo-grand" src="/logo.png" alt="" />
       <h1>Bienvenue dans Révisio</h1>
       <p className="texte-doux">
-        Révisio transforme tes notes Obsidian en cartes de révision et te prépare chaque jour une séance. Deux minutes
+        Révisio est ton cahier de cours et ton coach de révision : tu y écris tes notes (ou tu gardes ton vault Obsidian), il en tire des cartes et te prépare chaque jour une séance. Deux minutes
         suffisent pour tout régler.
       </p>
       <ul className="guide-promesses">
         <li>
           <Lock size={18} className="icone" aria-hidden />
           <span>
-            <strong>Tes notes ne sont jamais modifiées.</strong> Révisio les lit, rien de plus.
+            <strong>Tes notes restent à toi.</strong> De simples fichiers Markdown ; dans un dossier existant, rien n'est modifié sans ton accord.
           </span>
         </li>
         <li>
