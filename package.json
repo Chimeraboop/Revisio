@@ -1,7 +1,7 @@
 {
   "name": "revisio",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "type": "module",
   "scripts": {
     "predev": "node scripts/copier-polices-excalidraw.mjs",
@@ -41,7 +41,7 @@
     "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "2.12.3",
     "@types/hast": "^3.0.5",
     "@types/mdast": "^4.0.4",
     "@types/node": "^26.6.5",

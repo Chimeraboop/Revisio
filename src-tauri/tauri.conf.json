@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Revisio",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "identifier": "fr.revisio.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -27,14 +27,20 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Révisio",
     "shortDescription": "Révision à partir du vault Obsidian",
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["French"],
-        "displayLanguageSelector": false
+        "languages": [
+          "French"
+        ],
+        "displayLanguageSelector": false,
+        "template": "nsis/installer.nsi",
+        "installerHooks": "nsis/hooks.nsh"
       }
     },
     "macOS": {

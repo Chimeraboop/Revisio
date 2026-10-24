@@ -1,6 +1,6 @@
 [package]
 name = "revisio"
-version = "0.10.0"
+version = "0.10.1"
 description = "Révisio — application de révision basée sur un vault Obsidian"
 authors = ["Chimeraboop"]
 license = "MIT"
