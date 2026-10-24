@@ -21,6 +21,7 @@ import { apercu, LIBELLES_NOTES, planifier, type Note } from "../revision/fsrs";
 import { MODULES, type ModuleCarte } from "../revision/modules";
 import { TexteMaths } from "../revision/symboles";
 import { noteAutoEvaluee, noteSuggeree, type Resultat } from "../revision/verification";
+import { useEstObsidian } from "../lib/dossier";
 
 export interface Bilan {
   vues: number;
@@ -147,6 +148,7 @@ interface PropsCarte {
 
 /** Une carte : question → (confiance) → correction → note 1-4. */
 function CarteEnCours({ carte, module, reglages, onNotee, onRetiree }: PropsCarte) {
+  const estObsidian = useEstObsidian();
   const mode = module.mode(carte, reglages);
   const [phase, setPhase] = useState<Phase>("question");
   const [confiance, setConfiance] = useState<Confiance | null>(null);
@@ -442,9 +444,11 @@ function CarteEnCours({ carte, module, reglages, onNotee, onRetiree }: PropsCart
             <button className="lien-discret" onClick={() => setExtraitVisible((v) => !v)}>
               <FileText size={14} aria-hidden /> {extraitVisible ? "Masquer" : "Voir"} l'extrait de la note
             </button>
-            <button className="lien-discret" onClick={() => api.ouvrirDansObsidian(carte.noteChemin)}>
-              <ExternalLink size={14} aria-hidden /> Ouvrir dans Obsidian
-            </button>
+            {estObsidian && (
+              <button className="lien-discret" onClick={() => api.ouvrirDansObsidian(carte.noteChemin)}>
+                <ExternalLink size={14} aria-hidden /> Ouvrir dans Obsidian
+              </button>
+            )}
           </div>
           {extraitVisible && (
             <div className="carte extrait apparait">

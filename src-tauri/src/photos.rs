@@ -162,7 +162,7 @@ pub fn accepter(etat: &Etat, id: i64) -> Result<String, String> {
     if vault::lire_octets(&racine, &chemin).ok().as_deref() != Some(avant.as_slice()) {
         conn.execute("UPDATE propositions_vault SET statut = 'perimee' WHERE id = ?1", [id])
             .map_err(|e| e.to_string())?;
-        return Err("La note a changé depuis cette proposition (dans Obsidian ?) : proposition retirée.".into());
+        return Err("La note a changé depuis cette proposition (dans un autre programme ?) : proposition retirée.".into());
     }
     let ctx = ecriture::Contexte {
         racine: &racine,

@@ -43,6 +43,7 @@ import VideosVue from "./views/VideosVue";
 import ReviserVue, { DemandeSeance } from "./views/ReviserVue";
 import ReglagesVue from "./views/ReglagesVue";
 import { TOUCHE_COMMANDE, toucheCommande } from "./lib/plateforme";
+import { definirEstObsidian } from "./lib/dossier";
 
 type Vue =
   | "accueil"
@@ -147,6 +148,11 @@ export default function App() {
       })
       .catch((e) => setErreur(messageErreur(e)));
   }, []);
+
+  // Bouton « Ouvrir dans Obsidian » seulement si le dossier de notes est un vault Obsidian.
+  useEffect(() => {
+    if (reglages?.cheminVault) api.estVaultObsidian().then(definirEstObsidian).catch(() => definirEstObsidian(false));
+  }, [reglages?.cheminVault]);
 
   // Photos du dossier surveillé transformées en notes par le cœur Rust : notification.
   useEffect(() => {

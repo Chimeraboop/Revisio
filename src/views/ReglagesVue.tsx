@@ -60,12 +60,12 @@ export default function ReglagesVue({ reglages, infos, onChange }: Props) {
       <EntetePage
         icone={Settings}
         titre="Réglages"
-        description="Ton vault, l'apparence, les séances de révision et l'intelligence artificielle."
+        description="Ton dossier de notes, l'apparence, les séances de révision et l'intelligence artificielle."
       />
 
       <section className="carte bloc">
         <h2 className="titre-bloc">
-          <FolderOpen size={18} className="icone" aria-hidden /> Vault Obsidian
+          <FolderOpen size={18} className="icone" aria-hidden /> Dossier de notes
         </h2>
         <ChoixVault cheminActuel={reglages.cheminVault} suggestions={infos.vaultsDetectes} onChoisi={onChange} />
       </section>

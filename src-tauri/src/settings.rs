@@ -153,16 +153,52 @@ pub fn enregistrer(dossier: &Path, reglages: &Reglages) -> Result<(), String> {
     Ok(())
 }
 
-/// Vérifie qu'un dossier ressemble à un vault Obsidian.
-pub fn valider_vault(chemin: &Path) -> Result<(), String> {
+/// Vérifie qu'un dossier peut servir de dossier de notes : n'importe quel dossier (vault Obsidian
+/// ou non), sauf la racine d'un disque et le dossier des données de Révisio.
+pub fn valider_vault(chemin: &Path, dossier_donnees: &Path) -> Result<(), String> {
     if !chemin.is_dir() {
         return Err("Ce dossier n'existe pas.".into());
     }
-    if !chemin.join(".obsidian").is_dir() {
-        return Err("Ce dossier ne contient pas de sous-dossier .obsidian : ce n'est pas un vault Obsidian.".into());
+    if chemin.parent().is_none() {
+        return Err("Choisis un dossier précis, pas la racine d'un disque.".into());
+    }
+    if crate::paths::est_dans(chemin, dossier_donnees) || crate::paths::est_dans(dossier_donnees, chemin) {
+        return Err("Ce dossier contient les données de Révisio : choisis un autre dossier pour tes notes.".into());
     }
     Ok(())
 }
+
+/// Vrai si le dossier est un vault Obsidian (bouton « Ouvrir dans Obsidian »).
+pub fn est_vault_obsidian(chemin: &Path) -> bool {
+    chemin.join(".obsidian").is_dir()
+}
+
+/// Première note d'un dossier de notes créé par Révisio (genre « accueil » : aucune carte n'en est tirée).
+pub const NOTE_ACCUEIL: &str = r#"# Bienvenue dans ton dossier de notes
+
+Ce dossier t'appartient : ce sont de simples fichiers Markdown (`.md`), lisibles par n'importe quel éditeur de texte, et par Obsidian si tu l'utilises un jour.
+
+## Ranger tes notes
+- Un dossier par **matière** (par exemple « Histoire »), et dedans un dossier par **chapitre**.
+- Une note par notion, plutôt courte : Révisio en tire des cartes de révision.
+
+## Ce qui devient des cartes de révision
+- Dans une note dont le titre commence par « Fiche de synthèse », les mots en **gras** deviennent des textes à trous.
+- Dans un encadré « Définition », les mots en gras aussi :
+
+```markdown
+> [!info]+ Définition
+> La **photosynthèse** produit du glucose à partir de la lumière.
+```
+
+- Dans une note dont le titre commence par « Vocabulaire », chaque ligne `* mot = traduction` devient une carte.
+- Une liste numérotée d'étapes devient un exercice « remettre dans l'ordre ».
+
+## Relier tes notes
+Écris `[[Titre d'une note]]` pour faire un lien vers une autre note. Tu peux aussi coller une image dans une note.
+
+Tu peux supprimer cette note quand tu veux.
+"#;
 
 /// Un vault qu'Obsidian connaît sur ce PC.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -182,7 +218,7 @@ pub fn vaults_obsidian() -> Vec<VaultDetecte> {
     };
     chemins_obsidian(&texte)
         .into_iter()
-        .filter(|c| valider_vault(Path::new(c)).is_ok())
+        .filter(|c| Path::new(c).is_dir())
         .map(|chemin| VaultDetecte {
             nom: Path::new(&chemin).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             chemin,
@@ -256,6 +292,26 @@ mod tests {
         std::fs::remove_file(dossier.join(NOM_FICHIER)).unwrap();
         assert_eq!(charger(&dossier).accueil_termine, Some(false));
         std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
+    #[test]
+    fn n_importe_quel_dossier_de_notes_sauf_racine_et_donnees() {
+        let base = std::env::temp_dir().join(format!("revisio-test-dossier-notes-{}", std::process::id()));
+        let notes = base.join("Mes cours");
+        let donnees = base.join("Revisio");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::create_dir_all(&donnees).unwrap();
+        // Pas besoin de .obsidian : un simple dossier suffit.
+        assert!(valider_vault(&notes, &donnees).is_ok());
+        assert!(!est_vault_obsidian(&notes));
+        assert!(valider_vault(&base.join("Absent"), &donnees).is_err());
+        assert!(valider_vault(&donnees, &donnees).is_err());
+        assert!(valider_vault(&base, &donnees).is_err(), "contient les données de Révisio");
+        let racine = notes.ancestors().last().unwrap();
+        assert!(valider_vault(racine, &donnees).is_err());
+        std::fs::create_dir_all(notes.join(".obsidian")).unwrap();
+        assert!(est_vault_obsidian(&notes));
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

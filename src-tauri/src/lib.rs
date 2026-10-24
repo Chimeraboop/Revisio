@@ -201,6 +201,8 @@ pub fn run() {
             commandes::lire_reglages,
             commandes::definir_vault,
             commandes::definir_accueil_termine,
+            commandes::creer_dossier_notes,
+            commandes::est_vault_obsidian,
             commandes::definir_ecriture_autorisee,
             commandes::enregistrer_note,
             commandes::historique_vault,

@@ -734,7 +734,8 @@ export interface Note {
   legendes: string[];
   retroliens: NoteResume[];
   contenu: string;
-  urlObsidian: string;
+  /** Lien vers la note dans Obsidian, seulement si le dossier de notes est un vault Obsidian. */
+  urlObsidian: string | null;
 }
 
 export interface Cible {
@@ -756,6 +757,8 @@ export const api = {
   infosApp: () => invoke<InfosApp>("infos_app"),
   lireReglages: () => invoke<Reglages>("lire_reglages"),
   definirVault: (chemin: string) => invoke<Reglages>("definir_vault", { chemin }),
+  creerDossierNotes: (parent: string, nom: string) => invoke<Reglages>("creer_dossier_notes", { parent, nom }),
+  estVaultObsidian: () => invoke<boolean>("est_vault_obsidian"),
   definirAccueilTermine: (termine: boolean) => invoke<Reglages>("definir_accueil_termine", { termine }),
   definirEcritureAutorisee: (autorisee: boolean) => invoke<Reglages>("definir_ecriture_autorisee", { autorisee }),
   enregistrerNote: (chemin: string, contenu: string, avant: string) =>

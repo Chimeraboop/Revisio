@@ -4344,3 +4344,18 @@ summary.callout-titre {
 .lots-photos > li > .bouton {
   align-self: flex-start;
 }
+
+.creation-dossier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-petit);
+  text-align: left;
+}
+
+.creation-dossier p {
+  margin: 0;
+}

@@ -25,7 +25,7 @@ pub const PHOTOS_PAR_LOT: usize = 10;
 /// Côté le plus long après réduction (assez pour lire une écriture manuscrite).
 const COTE_MAX: u32 = 2000;
 
-pub const CONSIGNE_SYSTEME: &str = "Tu aides un lycéen à transformer les photos de ses cours en notes Obsidian. \
+pub const CONSIGNE_SYSTEME: &str = "Tu aides un lycéen à transformer les photos de ses cours en notes Markdown (format Obsidian). \
 Tu transcris fidèlement ce qui est sur les photos : tu n'inventes rien, tu n'ajoutes aucune connaissance extérieure. \
 Si un passage est illisible, écris [illisible] plutôt que de deviner. Tu écris en français (ou dans la langue du cours \
 pour les langues étrangères), sans emoji.";
@@ -125,7 +125,7 @@ pub struct Notion {
 
 pub fn consigne_reperage(nombre: usize, arbre: &BTreeMap<String, Vec<String>>) -> String {
     format!(
-        "Voici {nombre} photo(s) d'un même cours. Voici l'organisation du vault Obsidian de l'élève \
+        "Voici {nombre} photo(s) d'un même cours. Voici l'organisation du dossier de notes de l'élève \
 (dossier : noms des notes, sans « .md ») :\n{}\n\n\
 Réponds en JSON :\n\
 - lisible : faux si les photos sont illisibles ou ne contiennent pas de cours (par exemple seulement des exercices \

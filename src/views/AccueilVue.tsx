@@ -391,7 +391,7 @@ export default function AccueilVue({ indexation, onSeanceDuJour, onPlanning, onR
 
       <section className="carte bloc apparait" style={{ "--i": 12 } as React.CSSProperties}>
         <div className="rangee entre">
-          <h2>Mon vault</h2>
+          <h2>Mes notes</h2>
           <button className="bouton" disabled={indexation?.enCours} onClick={() => api.reindexer()}>
             <RefreshCw size={15} className={"icone" + (indexation?.enCours ? " tourne" : "")} aria-hidden /> Réindexer
           </button>

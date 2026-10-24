@@ -118,7 +118,7 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
           <div className="fil texte-doux petit">
             {[note.matiere, note.chapitre].filter(Boolean).join(" › ") || "Hors matière"}
           </div>
-          <h1>{note.genre === "accueil" ? `Accueil — ${note.matiere ?? "vault"}` : note.titre}</h1>
+          <h1>{note.genre === "accueil" ? `Accueil — ${note.matiere ?? "mes notes"}` : note.titre}</h1>
           <div className="rangee">
             {LIBELLES_GENRE[note.genre] && (
               <span className={`badge badge-${note.genre}`}>{LIBELLES_GENRE[note.genre] ?? BADGES[note.genre]}</span>
@@ -134,9 +134,11 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
                 <Pencil size={15} aria-hidden /> Modifier
               </button>
             )}
-            <button className="bouton" onClick={() => api.ouvrirDansObsidian(note.chemin)} title={note.urlObsidian}>
-              <ExternalLink size={15} aria-hidden /> Ouvrir dans Obsidian
-            </button>
+            {note.urlObsidian && (
+              <button className="bouton" onClick={() => api.ouvrirDansObsidian(note.chemin)} title={note.urlObsidian}>
+                <ExternalLink size={15} aria-hidden /> Ouvrir dans Obsidian
+              </button>
+            )}
           </div>
         </header>
 

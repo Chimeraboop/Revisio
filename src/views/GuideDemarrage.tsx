@@ -27,7 +27,7 @@ interface Props {
   onTermine: (r: Reglages) => void;
 }
 
-const ETAPES = ["Bienvenue", "Ton vault", "Clé Gemini", "Photos de cours", "C'est prêt"];
+const ETAPES = ["Bienvenue", "Tes notes", "Clé Gemini", "Photos de cours", "C'est prêt"];
 const ADRESSE_CLE = "https://aistudio.google.com/apikey";
 
 export default function GuideDemarrage({ reglages, infos, onReglages, onTermine }: Props) {
@@ -163,7 +163,8 @@ function EtapeVault({
     <>
       <h2>Où sont tes notes ?</h2>
       <p className="texte-doux">
-        Choisis le dossier de ton vault Obsidian : c'est celui qui contient un sous-dossier caché <code>.obsidian</code>.
+        Choisis ton vault Obsidian ou n'importe quel dossier de notes Markdown. Tu n'as pas encore de notes ? Crée un
+        nouveau dossier : tu pourras écrire tes cours directement dans Révisio.
       </p>
       <ChoixVault cheminActuel={reglages.cheminVault} suggestions={infos.vaultsDetectes} onChoisi={onReglages} />
       {reglages.cheminVault &&
@@ -318,7 +319,7 @@ function Recapitulatif({ reglages, etatIa }: { reglages: Reglages; etatIa: EtatI
         <li>
           <CircleCheck size={18} className="icone verdict-juste" aria-hidden />
           <span>
-            <strong>Vault</strong>
+            <strong>Dossier de notes</strong>
             <code>{reglages.cheminVault}</code>
           </span>
         </li>

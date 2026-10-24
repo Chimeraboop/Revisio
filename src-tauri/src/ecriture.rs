@@ -155,7 +155,7 @@ pub fn modifier(
     }
     let avant = vault::lire_octets(ctx.racine, relatif)?;
     if !encore_pareille(&avant) {
-        return Err("La note a été modifiée entre-temps (dans Obsidian ?). Recharge-la avant de l'enregistrer.".into());
+        return Err("La note a été modifiée entre-temps (dans un autre programme ?). Recharge-la avant de l'enregistrer.".into());
     }
     if avant == nouveau.as_bytes() {
         return Err("Aucun changement à enregistrer.".into());
@@ -203,8 +203,8 @@ pub fn annuler(conn: &Connection, racine: &Path, id: i64, maintenant: i64) -> Re
     let actuel = vault::lire_octets(racine, &chemin)?;
     if actuel != apres {
         return Err(format!(
-            "{chemin} a été modifiée depuis : l'annulation effacerait ces changements. Corrige-la plutôt dans Obsidian \
-             ou avec le bouton Modifier."
+            "{chemin} a été modifiée depuis : l'annulation effacerait ces changements. Corrige-la plutôt \
+             avec le bouton Modifier."
         ));
     }
     if genre == "creation" {

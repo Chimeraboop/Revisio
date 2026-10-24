@@ -41,7 +41,7 @@ pub fn lire_reglages(etat: State<Etat>) -> Reglages {
 
 #[tauri::command]
 pub fn definir_vault(app: AppHandle, etat: State<Etat>, chemin: String) -> Result<Reglages, String> {
-    settings::valider_vault(Path::new(&chemin))?;
+    settings::valider_vault(Path::new(&chemin), &etat.dossier)?;
     let ancien = etat.reglages.lock().unwrap().chemin_vault.clone();
     let change = ancien.as_deref() != Some(chemin.as_str());
     let reglages = modifier_reglages(&etat, |r| {
@@ -62,6 +62,45 @@ pub fn definir_vault(app: AppHandle, etat: State<Etat>, chemin: String) -> Resul
     lancer_indexation(&app);
     demarrer_surveillance(&app);
     Ok(reglages)
+}
+
+/// Crée un nouveau dossier de notes (pour qui n'en a pas encore), avec une note d'accueil,
+/// et le choisit. Révisio a le droit d'y écrire d'emblée : c'est le cahier de l'élève.
+#[tauri::command]
+pub fn creer_dossier_notes(app: AppHandle, etat: State<Etat>, parent: String, nom: String) -> Result<Reglages, String> {
+    let nom = ecriture::nom_de_fichier(&nom);
+    if nom.is_empty() {
+        return Err("Donne un nom au dossier.".into());
+    }
+    let parent = Path::new(&parent);
+    if !parent.is_dir() {
+        return Err("L'emplacement choisi n'existe pas.".into());
+    }
+    let dossier = parent.join(&nom);
+    if dossier.exists() {
+        return Err(format!("Un dossier « {nom} » existe déjà à cet endroit : choisis-le, ou donne un autre nom."));
+    }
+    if crate::paths::est_dans(&dossier, &etat.dossier) {
+        return Err("Choisis un emplacement en dehors des données de Révisio.".into());
+    }
+    std::fs::create_dir(&dossier).map_err(|e| format!("Création du dossier : {e}"))?;
+    let ctx = ecriture::Contexte {
+        racine: &dossier,
+        autorisee: true,
+        origine: "manuel",
+        lot_id: None,
+        raison: None,
+        maintenant: maintenant_ms(),
+    };
+    ecriture::creer(&etat.db.lock().unwrap(), &ctx, "Accueil.md", settings::NOTE_ACCUEIL)?;
+    modifier_reglages(&etat, |r| r.ecriture_autorisee = true)?;
+    definir_vault(app, etat, dossier.to_string_lossy().into_owned())
+}
+
+/// Le dossier de notes est-il un vault Obsidian ? (sinon, pas de bouton « Ouvrir dans Obsidian »)
+#[tauri::command]
+pub fn est_vault_obsidian(etat: State<Etat>) -> bool {
+    etat.reglages.lock().unwrap().vault().is_some_and(|v| settings::est_vault_obsidian(&v))
 }
 
 #[tauri::command]
@@ -350,7 +389,8 @@ pub struct Note {
     fiche: navigation::FicheNote,
     /// Markdown lu dans le vault à l'instant (lecture seule).
     contenu: String,
-    url_obsidian: String,
+    /// Lien `obsidian://`, seulement si le dossier de notes est un vault Obsidian.
+    url_obsidian: Option<String>,
 }
 
 #[tauri::command]
@@ -362,7 +402,8 @@ pub fn note(etat: State<Etat>, chemin: String) -> Result<Note, String> {
     let vault = reglages.vault().ok_or("Aucun vault choisi.")?;
     let contenu = vault::lire_texte(&vault, &chemin)?;
     Ok(Note {
-        url_obsidian: navigation::url_obsidian(&reglages.nom_obsidian(), &chemin),
+        url_obsidian: settings::est_vault_obsidian(&vault)
+            .then(|| navigation::url_obsidian(&reglages.nom_obsidian(), &chemin)),
         fiche,
         contenu,
     })

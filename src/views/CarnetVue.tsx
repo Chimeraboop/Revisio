@@ -7,6 +7,7 @@ import { MarkdownObsidian } from "../markdown/rendu";
 import { NOMS_GENRES, remplirTrou } from "../revision/modules";
 import { TexteMaths } from "../revision/symboles";
 import SeanceVue, { Bilan } from "./SeanceVue";
+import { useEstObsidian } from "../lib/dossier";
 
 interface Props {
   reglages: Reglages;
@@ -38,6 +39,7 @@ function Question({ e }: { e: ErreurCarnet }) {
 }
 
 export default function CarnetVue({ reglages, onOuvrirNote }: Props) {
+  const estObsidian = useEstObsidian();
   const [erreurs, setErreurs] = useState<ErreurCarnet[] | null>(null);
   const [matiere, setMatiere] = useState("");
   const [avecComprises, setAvecComprises] = useState(false);
@@ -208,9 +210,11 @@ export default function CarnetVue({ reglages, onOuvrirNote }: Props) {
                 >
                   <BookOpen size={14} aria-hidden /> Ouvrir « {e.titreNote} »
                 </button>
-                <button className="lien-discret" onClick={() => api.ouvrirDansObsidian(e.noteChemin)}>
-                  <ExternalLink size={14} aria-hidden /> Ouvrir dans Obsidian
-                </button>
+                {estObsidian && (
+                  <button className="lien-discret" onClick={() => api.ouvrirDansObsidian(e.noteChemin)}>
+                    <ExternalLink size={14} aria-hidden /> Ouvrir dans Obsidian
+                  </button>
+                )}
                 <span className="espace" />
                 <button className="bouton" onClick={() => marquer(e)}>
                   {e.comprise ? (
