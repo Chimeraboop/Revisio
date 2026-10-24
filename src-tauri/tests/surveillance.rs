@@ -20,6 +20,11 @@ fn signale_les_notes_modifiees_mais_pas_obsidian() {
     })
     .unwrap();
 
+    // macOS (FSEvents) peut signaler en retard la création des dossiers faite juste avant la surveillance :
+    // on laisse passer ces signaux avant de tester.
+    std::thread::sleep(Duration::from_secs(3));
+    while reception.try_recv().is_ok() {}
+
     // Un changement dans .obsidian (ex. Obsidian qui enregistre son espace de travail) : ignoré.
     fs::write(dossier.join(".obsidian").join("workspace.json"), "{}").unwrap();
     assert!(
