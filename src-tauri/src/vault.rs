@@ -84,6 +84,22 @@ pub fn lister_fichiers(racine: &Path) -> Result<Vec<FichierVault>, String> {
     Ok(fichiers)
 }
 
+/// Dossiers du vault (hors dossiers ignorés), en chemins relatifs triés : pour choisir où ranger une note.
+pub fn lister_dossiers(racine: &Path) -> Vec<String> {
+    let parcours = WalkDir::new(racine)
+        .min_depth(1)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| !(e.file_type().is_dir() && dossier_ignore(&e.file_name().to_string_lossy())));
+    let mut dossiers: Vec<String> = parcours
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_dir())
+        .filter_map(|e| e.path().strip_prefix(racine).ok().map(vers_chemin_relatif))
+        .collect();
+    dossiers.sort_by_key(|d| d.to_lowercase());
+    dossiers
+}
+
 /// Modèles de notes du vault (fichiers `.md` d'un dossier `_Templates`, ignoré par l'index),
 /// en chemins relatifs. Sert d'exemple de mise en forme pour l'IA.
 pub fn lister_modeles(racine: &Path) -> Vec<String> {

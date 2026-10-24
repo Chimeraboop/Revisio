@@ -17,6 +17,7 @@ pub mod photos;
 pub mod paths;
 pub mod planning;
 pub mod podcasts;
+pub mod renommage;
 pub mod revision;
 pub mod search;
 pub mod secret;
@@ -207,6 +208,14 @@ pub fn run() {
             commandes::enregistrer_note,
             commandes::historique_vault,
             commandes::annuler_ecriture,
+            commandes::dossiers_notes,
+            commandes::creer_dossier,
+            commandes::creer_note,
+            commandes::renommer_element,
+            commandes::deplacer_element,
+            commandes::supprimer_element,
+            commandes::corbeille,
+            commandes::restaurer,
             commandes::importer_photos,
             commandes::relancer_lot_photos,
             commandes::lots_photos,

@@ -91,6 +91,7 @@ pub fn creer_dossier_notes(app: AppHandle, etat: State<Etat>, parent: String, no
         lot_id: None,
         raison: None,
         maintenant: maintenant_ms(),
+        groupe: None,
     };
     ecriture::creer(&etat.db.lock().unwrap(), &ctx, "Accueil.md", settings::NOTE_ACCUEIL)?;
     modifier_reglages(&etat, |r| r.ecriture_autorisee = true)?;
@@ -211,6 +212,7 @@ pub fn enregistrer_note(etat: State<Etat>, chemin: String, contenu: String, avan
         lot_id: None,
         raison: None,
         maintenant: maintenant_ms(),
+        groupe: None,
     };
     let pareille = |octets: &[u8]| {
         let texte = String::from_utf8_lossy(octets);
@@ -221,15 +223,237 @@ pub fn enregistrer_note(etat: State<Etat>, chemin: String, contenu: String, avan
     ecriture::modifier(&etat.db.lock().unwrap(), &ctx, &chemin, &contenu, &pareille)
 }
 
+// ---------- Gestion des notes et dossiers (écriture autorisée seulement) ----------
+
+static COMPTEUR_GROUPES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Identifiant d'un groupe d'opérations annulées ensemble.
+fn nouveau_groupe() -> String {
+    let n = COMPTEUR_GROUPES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    format!("{}-{n}", maintenant_ms())
+}
+
+fn contexte_manuel<'a>(racine: &'a Path, reglages: &Reglages, groupe: Option<&'a str>, raison: Option<&'a str>) -> ecriture::Contexte<'a> {
+    ecriture::Contexte {
+        racine,
+        autorisee: reglages.ecriture_autorisee,
+        origine: "manuel",
+        lot_id: None,
+        raison,
+        maintenant: maintenant_ms(),
+        groupe,
+    }
+}
+
+/// Dossiers du dossier de notes (pour choisir où ranger ou déplacer une note).
+#[tauri::command]
+pub fn dossiers_notes(etat: State<Etat>) -> Result<Vec<String>, String> {
+    let racine = etat.reglages.lock().unwrap().vault().ok_or("Aucun dossier de notes choisi.")?;
+    Ok(vault::lister_dossiers(&racine))
+}
+
+/// Crée un dossier (une matière, un chapitre…). `chemin` est relatif au dossier de notes.
+#[tauri::command]
+pub fn creer_dossier(app: AppHandle, etat: State<Etat>, chemin: String) -> Result<String, String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let chemin = nettoyer_chemin(&chemin)?;
+    ecriture::creer_dossier(&etat.db.lock().unwrap(), &contexte_manuel(&racine, &reglages, None, None), &chemin)?;
+    lancer_indexation(&app);
+    Ok(chemin)
+}
+
+/// Chemin relatif saisi dans l'interface : chaque morceau devient un nom de fichier valide.
+fn nettoyer_chemin(chemin: &str) -> Result<String, String> {
+    let morceaux: Vec<String> = chemin
+        .split(['/', '\\'])
+        .map(ecriture::nom_de_fichier)
+        .filter(|m| !m.is_empty())
+        .collect();
+    if morceaux.is_empty() {
+        return Err("Donne un nom.".into());
+    }
+    Ok(morceaux.join("/"))
+}
+
+/// Crée une note dans `dossier` (vide = à la racine) à partir d'un modèle :
+/// « vide », « cours », « synthese » (fiche de synthèse) ou « vocabulaire ». Renvoie son chemin.
+#[tauri::command]
+pub fn creer_note(app: AppHandle, etat: State<Etat>, dossier: String, titre: String, modele: String) -> Result<String, String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let titre = ecriture::nom_de_fichier(&titre);
+    if titre.is_empty() {
+        return Err("Donne un titre à la note.".into());
+    }
+    let nom = match modele.as_str() {
+        "synthese" if !titre.starts_with("Fiche de synthèse") => format!("Fiche de synthèse - {titre}"),
+        "vocabulaire" if !titre.starts_with("Vocabulaire") => format!("Vocabulaire - {titre}"),
+        _ => titre,
+    };
+    let date = chrono::Local::now().format("%Y-%m-%dT%H:%M");
+    let corps = match modele.as_str() {
+        "cours" => "> [!info]+ Définition\n> \n\n> [!tip]+ Notes liées\n> \n",
+        "synthese" => "## L'essentiel\n\n## Notions du chapitre\n- \n",
+        "vocabulaire" => "%% Une ligne par mot, sous la forme : * mot = traduction %%\n\n",
+        _ => "",
+    };
+    let contenu = format!("---\ncreated: {date}\n---\n\n{corps}");
+    let dossier = if dossier.trim().is_empty() { String::new() } else { nettoyer_chemin(&dossier)? };
+    // Nom déjà pris : « Note 2 », « Note 3 »…
+    let mut chemin = String::new();
+    for n in 1..100 {
+        let fichier = if n == 1 { format!("{nom}.md") } else { format!("{nom} {n}.md") };
+        chemin = if dossier.is_empty() { fichier } else { format!("{dossier}/{fichier}") };
+        if !racine.join(&chemin).exists() {
+            break;
+        }
+    }
+    ecriture::creer(&etat.db.lock().unwrap(), &contexte_manuel(&racine, &reglages, None, None), &chemin, &contenu)?;
+    lancer_indexation(&app);
+    Ok(chemin)
+}
+
+/// Renomme une note, une image ou un dossier (même dossier parent). Les liens [[…]] vers une note
+/// renommée sont mis à jour dans les autres notes ; la progression de révision suit.
+/// Renvoie le nouveau chemin.
+#[tauri::command]
+pub fn renommer_element(app: AppHandle, etat: State<Etat>, chemin: String, nom: String) -> Result<String, String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let est_dossier = racine.join(&chemin).is_dir();
+    let nom = nom.trim();
+    let est_note = !est_dossier && chemin.to_lowercase().ends_with(".md");
+    let nom = if est_note { nom.strip_suffix(".md").unwrap_or(nom) } else { nom };
+    let mut nom = ecriture::nom_de_fichier(nom);
+    if nom.is_empty() {
+        return Err("Donne un nom.".into());
+    }
+    if est_note {
+        nom.push_str(".md");
+    } else if !est_dossier {
+        // Image ou autre fichier : on garde l'extension d'origine.
+        if let Some(ext) = Path::new(&chemin).extension() {
+            let ext = ext.to_string_lossy();
+            if !nom.to_lowercase().ends_with(&format!(".{}", ext.to_lowercase())) {
+                nom = format!("{nom}.{ext}");
+            }
+        }
+    }
+    let nouveau = match chemin.rsplit_once('/') {
+        Some((parent, _)) => format!("{parent}/{nom}"),
+        None => nom.clone(),
+    };
+    if nouveau == chemin {
+        return Ok(chemin);
+    }
+    let groupe = nouveau_groupe();
+    let conn = etat.db.lock().unwrap();
+    ecriture::deplacer(&conn, &contexte_manuel(&racine, &reglages, Some(&groupe), None), &chemin, &nouveau)?;
+    crate::renommage::migrer_chemins(&conn, &chemin, &nouveau).map_err(|e| e.to_string())?;
+    if est_note {
+        let ancien_nom = chemin.rsplit('/').next().unwrap_or(&chemin).trim_end_matches(".md").to_string();
+        let nouveau_nom = nom.trim_end_matches(".md").to_string();
+        if ancien_nom.to_lowercase() != nouveau_nom.to_lowercase() {
+            let raison = format!("Lien vers « {nouveau_nom} » mis à jour");
+            let ctx = contexte_manuel(&racine, &reglages, Some(&groupe), Some(&raison));
+            for source in crate::renommage::notes_qui_lient(&conn, &ancien_nom).map_err(|e| e.to_string())? {
+                let source = crate::renommage::chemin_deplace(&source, &chemin, &nouveau).unwrap_or(source);
+                let Ok(octets) = vault::lire_octets(&racine, &source) else { continue };
+                let texte = String::from_utf8_lossy(&octets).into_owned();
+                if let Some(modifie) = crate::renommage::remplacer_liens(&texte, &ancien_nom, &nouveau_nom) {
+                    // Une note qu'on ne peut pas modifier (dessin Excalidraw…) garde son ancien lien.
+                    let _ = ecriture::modifier(&conn, &ctx, &source, &modifie, &|a| a == octets.as_slice());
+                }
+            }
+        }
+    }
+    drop(conn);
+    // Matière renommée : elle reste exclue des séances du jour si elle l'était.
+    if !chemin.contains('/') && est_dossier && reglages.matieres_exclues.contains(&chemin) {
+        modifier_reglages(&etat, |r| {
+            for m in r.matieres_exclues.iter_mut().filter(|m| **m == chemin) {
+                *m = nouveau.clone();
+            }
+        })?;
+    }
+    lancer_indexation(&app);
+    Ok(nouveau)
+}
+
+/// Déplace une note, une image ou un dossier dans un autre dossier (vide = racine). Renvoie le nouveau chemin.
+#[tauri::command]
+pub fn deplacer_element(app: AppHandle, etat: State<Etat>, chemin: String, dossier: String) -> Result<String, String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let nom = chemin.rsplit('/').next().unwrap_or(&chemin).to_string();
+    let nouveau = if dossier.trim().is_empty() { nom } else { format!("{}/{nom}", dossier.trim_matches('/')) };
+    if nouveau == chemin {
+        return Ok(chemin);
+    }
+    let groupe = nouveau_groupe();
+    let conn = etat.db.lock().unwrap();
+    ecriture::deplacer(&conn, &contexte_manuel(&racine, &reglages, Some(&groupe), None), &chemin, &nouveau)?;
+    crate::renommage::migrer_chemins(&conn, &chemin, &nouveau).map_err(|e| e.to_string())?;
+    drop(conn);
+    lancer_indexation(&app);
+    Ok(nouveau)
+}
+
+/// Met une note, une image ou un dossier à la corbeille de Révisio (restaurable).
+#[tauri::command]
+pub fn supprimer_element(app: AppHandle, etat: State<Etat>, chemin: String) -> Result<String, String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let groupe = nouveau_groupe();
+    let n = ecriture::supprimer(&etat.db.lock().unwrap(), &contexte_manuel(&racine, &reglages, Some(&groupe), None), &chemin)?;
+    lancer_indexation(&app);
+    Ok(if n == 1 {
+        "Mis à la corbeille de Révisio.".into()
+    } else {
+        format!("{n} fichiers mis à la corbeille de Révisio.")
+    })
+}
+
+#[tauri::command]
+pub fn corbeille(etat: State<Etat>) -> Result<Vec<ecriture::ElementCorbeille>, String> {
+    ecriture::corbeille(&etat.db.lock().unwrap()).map_err(|e| e.to_string())
+}
+
+/// Restaure un élément de la corbeille.
+#[tauri::command]
+pub fn restaurer(app: AppHandle, etat: State<Etat>, groupe: String) -> Result<String, String> {
+    let racine = etat.reglages.lock().unwrap().vault().ok_or("Aucun dossier de notes choisi.")?;
+    let conn = etat.db.lock().unwrap();
+    let a = ecriture::annuler_groupe(&conn, &racine, &groupe, maintenant_ms())?;
+    appliquer_annulation(&conn, &a)?;
+    drop(conn);
+    lancer_indexation(&app);
+    Ok(a.message)
+}
+
+/// Après une annulation : la base suit les fichiers remis à leur place.
+fn appliquer_annulation(conn: &rusqlite::Connection, a: &ecriture::Annulation) -> Result<(), String> {
+    for (de, vers) in &a.deplacements {
+        crate::renommage::migrer_chemins(conn, de, vers).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn historique_vault(etat: State<Etat>) -> Result<Vec<ecriture::EntreeHistorique>, String> {
     ecriture::historique(&etat.db.lock().unwrap(), 200).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn annuler_ecriture(etat: State<Etat>, id: i64) -> Result<String, String> {
+pub fn annuler_ecriture(app: AppHandle, etat: State<Etat>, id: i64) -> Result<String, String> {
     let racine = etat.reglages.lock().unwrap().vault().ok_or("Aucun vault choisi.")?;
-    ecriture::annuler(&etat.db.lock().unwrap(), &racine, id, maintenant_ms())
+    let conn = etat.db.lock().unwrap();
+    let a = ecriture::annuler(&conn, &racine, id, maintenant_ms())?;
+    appliquer_annulation(&conn, &a)?;
+    drop(conn);
+    lancer_indexation(&app);
+    Ok(a.message)
 }
 
 /// Photos choisies par l'élève : un lot (un cours), traité aussitôt. Interruptible.

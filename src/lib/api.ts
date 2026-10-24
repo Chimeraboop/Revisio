@@ -88,11 +88,24 @@ export interface EntreeHistorique {
   id: number;
   date: number;
   chemin: string;
-  genre: "creation" | "modification";
+  genre: "creation" | "modification" | "dossier" | "deplacement" | "suppression" | "suppression_dossier";
   origine: "manuel" | "photos";
   lotId: number | null;
   raison: string | null;
   annuleeLe: number | null;
+  /** Déplacement : nouvelle place. */
+  cheminNouveau: string | null;
+  /** Opérations annulées ensemble (renommage et liens mis à jour, suppression d'un dossier…). */
+  groupe: string | null;
+}
+
+/** Une suppression restaurable (corbeille de Révisio). */
+export interface ElementCorbeille {
+  groupe: string;
+  date: number;
+  chemin: string;
+  dossier: boolean;
+  fichiers: number;
 }
 
 /** IA locale (Ollama) pour les tâches simples. */
@@ -765,6 +778,14 @@ export const api = {
     invoke<number>("enregistrer_note", { chemin, contenu, avant }),
   historiqueVault: () => invoke<EntreeHistorique[]>("historique_vault"),
   annulerEcriture: (id: number) => invoke<string>("annuler_ecriture", { id }),
+  dossiersNotes: () => invoke<string[]>("dossiers_notes"),
+  creerDossier: (chemin: string) => invoke<string>("creer_dossier", { chemin }),
+  creerNote: (dossier: string, titre: string, modele: string) => invoke<string>("creer_note", { dossier, titre, modele }),
+  renommerElement: (chemin: string, nom: string) => invoke<string>("renommer_element", { chemin, nom }),
+  deplacerElement: (chemin: string, dossier: string) => invoke<string>("deplacer_element", { chemin, dossier }),
+  supprimerElement: (chemin: string) => invoke<string>("supprimer_element", { chemin }),
+  corbeille: () => invoke<ElementCorbeille[]>("corbeille"),
+  restaurer: (groupe: string) => invoke<string>("restaurer", { groupe }),
   importerPhotos: (chemins: string[], tache?: string) => invoke<LotPhotos>("importer_photos", { chemins, tache }),
   relancerLotPhotos: (id: number, tache?: string) => invoke<LotPhotos>("relancer_lot_photos", { id, tache }),
   lotsPhotos: () => invoke<LotPhotos[]>("lots_photos"),

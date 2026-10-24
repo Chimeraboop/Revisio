@@ -171,6 +171,7 @@ pub fn accepter(etat: &Etat, id: i64) -> Result<String, String> {
         lot_id,
         raison: Some(&raison),
         maintenant: maintenant_ms(),
+        groupe: None,
     };
     let historique = ecriture::modifier(&conn, &ctx, &chemin, &apres, &|a| a == avant.as_slice())?;
     conn.execute(
@@ -276,6 +277,7 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         lot_id: Some(id),
         raison: None,
         maintenant: maintenant_ms(),
+        groupe: None,
     };
     let mut creees = 0;
     let mut deja = Vec::new();

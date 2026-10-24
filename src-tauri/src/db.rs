@@ -324,6 +324,12 @@ const MIGRATIONS: &[&str] = &[
         historique_id INTEGER
     );
     "#,
+    // 13 — gestion des fichiers : dossiers, renommages/déplacements, corbeille (suppressions annulables)
+    r#"
+    ALTER TABLE historique_vault ADD COLUMN chemin_nouveau TEXT;   -- déplacement : nouvelle place
+    ALTER TABLE historique_vault ADD COLUMN groupe TEXT;           -- opérations annulées ensemble
+    CREATE INDEX historique_vault_groupe ON historique_vault(groupe);
+    "#,
 ];
 
 pub fn lire_meta(conn: &Connection, cle: &str) -> Option<String> {

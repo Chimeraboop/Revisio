@@ -369,6 +369,19 @@ export default function App() {
             onRetour={revenir}
             indexation={indexation}
             ecritureAutorisee={reglages.ecritureAutorisee}
+            onAutoriser={() =>
+              api
+                .definirEcritureAutorisee(true)
+                .then(setReglages)
+                .catch((e) => setErreur(messageErreur(e)))
+            }
+            onRemplacer={(ancien, nouveau) =>
+              setHistorique((h) =>
+                nouveau === null
+                  ? h.filter((p) => p.chemin !== ancien)
+                  : h.map((p) => (p.chemin === ancien ? { ...p, chemin: nouveau } : p)),
+              )
+            }
           />
         ) : (
           <RechercheVue onOuvrir={ouvrirNote} texte={texteRecherche} onTexte={setTexteRecherche} />

@@ -16,6 +16,9 @@ interface Props {
   versionIndex: unknown;
   /** Mode Modifier proposé seulement si l'élève a autorisé l'écriture dans le vault. */
   ecritureAutorisee: boolean;
+  /** Note qui vient d'être créée : ouverte directement en mode édition. */
+  ouvrirEnEdition?: boolean;
+  onEditionOuverte?: () => void;
 }
 
 const LIBELLES_GENRE: Record<string, string> = {
@@ -29,7 +32,7 @@ const LIBELLES_GENRE: Record<string, string> = {
   accueil: "Accueil",
 };
 
-export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecritureAutorisee }: Props) {
+export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecritureAutorisee, ouvrirEnEdition, onEditionOuverte }: Props) {
   const [note, setNote] = useState<Note | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   // Mode Modifier : texte en cours d'édition (null = lecture).
@@ -66,6 +69,14 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
     setEnregistre(null);
     setErreurEdition(null);
   }, [chemin]);
+
+  // Note qui vient d'être créée : directement en mode édition.
+  useEffect(() => {
+    if (ouvrirEnEdition && note && note.chemin === chemin && ecritureAutorisee) {
+      setBrouillon(note.contenu);
+      onEditionOuverte?.();
+    }
+  }, [ouvrirEnEdition, note, chemin]);
 
   async function enregistrer() {
     if (!note || brouillon === null) return;
