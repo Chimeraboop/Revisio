@@ -786,6 +786,10 @@ export const api = {
   supprimerElement: (chemin: string) => invoke<string>("supprimer_element", { chemin }),
   corbeille: () => invoke<ElementCorbeille[]>("corbeille"),
   restaurer: (groupe: string) => invoke<string>("restaurer", { groupe }),
+  /** Image collée ou déposée : enregistrée comme pièce jointe, renvoie son nom (pour ![[nom]]). */
+  ajouterImage: (note: string, octets: Uint8Array) =>
+    invoke<string>("ajouter_image", octets, { headers: { "x-note": encodeURIComponent(note) } }),
+  importerImage: (note: string, source: string) => invoke<string>("importer_image", { note, source }),
   importerPhotos: (chemins: string[], tache?: string) => invoke<LotPhotos>("importer_photos", { chemins, tache }),
   relancerLotPhotos: (id: number, tache?: string) => invoke<LotPhotos>("relancer_lot_photos", { id, tache }),
   lotsPhotos: () => invoke<LotPhotos[]>("lots_photos"),

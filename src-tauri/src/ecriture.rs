@@ -360,6 +360,62 @@ pub struct Annulation {
     pub deplacements: Vec<(String, String)>,
 }
 
+/// Durée d'une « séance d'écriture » : les enregistrements automatiques d'une note pendant ce temps
+/// forment une seule entrée de l'historique (annuler revient à l'état d'avant la séance).
+pub const DUREE_SEANCE_ECRITURE_MS: i64 = 10 * 60 * 1000;
+
+/// Comme `modifier`, mais prolonge la dernière modification manuelle de la même note si elle date
+/// de moins de 10 minutes et que la note n'a pas changé depuis (enregistrement automatique de l'éditeur).
+/// Renvoie l'identifiant de l'entrée d'historique (créée ou prolongée).
+pub fn modifier_en_seance(
+    conn: &Connection,
+    ctx: &Contexte,
+    relatif: &str,
+    nouveau: &str,
+    encore_pareille: &dyn Fn(&[u8]) -> bool,
+) -> Result<i64, String> {
+    if !ctx.autorisee {
+        return Err(DESACTIVEE.into());
+    }
+    let complet = chemin_ecrivable(ctx.racine, relatif)?;
+    if !complet.is_file() {
+        return Err(format!("Note introuvable : {relatif}"));
+    }
+    let actuel = vault::lire_octets(ctx.racine, relatif)?;
+    if !encore_pareille(&actuel) {
+        return Err("La note a été modifiée entre-temps (dans un autre programme ?). Recharge-la avant de l'enregistrer.".into());
+    }
+    let derniere: Option<(i64, Vec<u8>, i64, String, Option<String>, Option<i64>)> = conn
+        .query_row(
+            "SELECT id, apres, date, origine, groupe, annulee_le FROM historique_vault
+             WHERE id = (SELECT max(id) FROM historique_vault WHERE chemin = ?1) AND genre = 'modification'",
+            [relatif],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    match derniere {
+        Some((id, apres, date, origine, None, None))
+            if origine == "manuel" && apres == actuel && ctx.maintenant - date < DUREE_SEANCE_ECRITURE_MS =>
+        {
+            if actuel == nouveau.as_bytes() {
+                return Ok(id);
+            }
+            conn.execute(
+                "UPDATE historique_vault SET apres = ?2, date = ?3 WHERE id = ?1",
+                params![id, nouveau.as_bytes(), ctx.maintenant],
+            )
+            .map_err(|e| e.to_string())?;
+            if let Err(e) = std::fs::write(&complet, nouveau.as_bytes()) {
+                conn.execute("UPDATE historique_vault SET apres = ?2 WHERE id = ?1", params![id, actuel]).ok();
+                return Err(format!("Écriture de {relatif} : {e}"));
+            }
+            Ok(id)
+        }
+        _ => modifier(conn, ctx, relatif, nouveau, encore_pareille),
+    }
+}
+
 /// Annule une écriture (ou tout son groupe : un renommage avec ses liens, une suppression de dossier…).
 /// Refusé si une note a été retouchée depuis (pour ne jamais perdre ces changements).
 /// Possible même si l'écriture a été désactivée ensuite : on ne fait que revenir en arrière.

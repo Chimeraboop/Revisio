@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Pencil, Save, Undo2, X } from "lucide-react";
+import { ExternalLink, Pencil, Undo2 } from "lucide-react";
 import { api, messageErreur, Note } from "../lib/api";
 import Message from "../composants/Message";
 import Dessin from "../excalidraw/Dessin";
 import { extraireScene } from "../excalidraw/scene";
 import { MarkdownObsidian } from "../markdown/rendu";
 import { BADGES } from "./ArbreNotes";
-import { TOUCHE_COMMANDE, toucheCommande } from "../lib/plateforme";
+import EditeurNote from "../editeur/EditeurNote";
 
 interface Props {
   chemin: string;
@@ -35,8 +35,8 @@ const LIBELLES_GENRE: Record<string, string> = {
 export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecritureAutorisee, ouvrirEnEdition, onEditionOuverte }: Props) {
   const [note, setNote] = useState<Note | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
-  // Mode Modifier : texte en cours d'édition (null = lecture).
-  const [brouillon, setBrouillon] = useState<string | null>(null);
+  // Mode édition (éditeur avec aperçu) ou lecture.
+  const [edition, setEdition] = useState(false);
   const [enregistre, setEnregistre] = useState<{ id: number } | null>(null);
   const [erreurEdition, setErreurEdition] = useState<string | null>(null);
   const [relecture, setRelecture] = useState(0);
@@ -63,9 +63,9 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
     };
   }, [chemin, versionIndex, relecture]);
 
-  // Autre note : on quitte le mode Modifier.
+  // Autre note : on quitte le mode édition.
   useEffect(() => {
-    setBrouillon(null);
+    setEdition(false);
     setEnregistre(null);
     setErreurEdition(null);
   }, [chemin]);
@@ -73,23 +73,10 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
   // Note qui vient d'être créée : directement en mode édition.
   useEffect(() => {
     if (ouvrirEnEdition && note && note.chemin === chemin && ecritureAutorisee) {
-      setBrouillon(note.contenu);
+      setEdition(true);
       onEditionOuverte?.();
     }
   }, [ouvrirEnEdition, note, chemin]);
-
-  async function enregistrer() {
-    if (!note || brouillon === null) return;
-    setErreurEdition(null);
-    try {
-      const id = await api.enregistrerNote(note.chemin, brouillon, note.contenu);
-      setEnregistre({ id });
-      setBrouillon(null);
-      setRelecture((n) => n + 1);
-    } catch (e) {
-      setErreurEdition(messageErreur(e));
-    }
-  }
 
   async function annulerEnregistrement() {
     if (!enregistre) return;
@@ -114,20 +101,39 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
         )
       : null;
     if (titre) titre.scrollIntoView({ block: "start" });
-    else conteneur.closest(".lecteur")?.scrollTo({ top: 0 });
+    else conteneur.closest(".lecteur-note")?.scrollTo({ top: 0 });
   }, [note, chemin, ancre]);
 
-  if (erreur) return <div className="lecteur"><p className="message-erreur">{erreur}</p></div>;
-  if (!note) return <div className="lecteur texte-doux">Chargement…</div>;
+  if (erreur) return <div className="lecteur-note"><p className="message-erreur">{erreur}</p></div>;
+  if (!note) return <div className="lecteur-note texte-doux">Chargement…</div>;
 
   const navigation = { source: note.chemin, ouvrirNote: onOuvrir };
+  const fil = [note.matiere, note.chapitre].filter(Boolean).join(" › ") || "Hors matière";
+
+  if (edition)
+    return (
+      <div className="lecteur-edition">
+        <EditeurNote
+          chemin={note.chemin}
+          titre={note.titre}
+          fil={fil}
+          contenu={note.contenu}
+          navigation={navigation}
+          onFermer={(id) => {
+            setEdition(false);
+            setEnregistre(id ? { id } : null);
+            setRelecture((n) => n + 1);
+          }}
+        />
+      </div>
+    );
 
   return (
-    <div className="lecteur">
+    <div className="lecteur-note">
       <article className="page-note">
         <header className="entete-note">
           <div className="fil texte-doux petit">
-            {[note.matiere, note.chapitre].filter(Boolean).join(" › ") || "Hors matière"}
+            {fil}
           </div>
           <h1>{note.genre === "accueil" ? `Accueil — ${note.matiere ?? "mes notes"}` : note.titre}</h1>
           <div className="rangee">
@@ -140,8 +146,8 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
               </span>
             ))}
             <span className="espace" />
-            {ecritureAutorisee && note.genre !== "schema" && brouillon === null && (
-              <button className="bouton" onClick={() => (setBrouillon(note.contenu), setEnregistre(null))}>
+            {ecritureAutorisee && note.genre !== "schema" && (
+              <button className="bouton" onClick={() => (setEdition(true), setEnregistre(null))}>
                 <Pencil size={15} aria-hidden /> Modifier
               </button>
             )}
@@ -155,7 +161,7 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
 
         {enregistre && (
           <Message genre="succes">
-            Note enregistrée. L'ancienne version est gardée dans le journal.{" "}
+            Modifications enregistrées. L'ancienne version est gardée dans le journal.{" "}
             <button className="lien-discret" onClick={annulerEnregistrement}>
               <Undo2 size={14} aria-hidden /> Annuler cette modification
             </button>
@@ -164,32 +170,7 @@ export default function LecteurNote({ chemin, ancre, onOuvrir, versionIndex, ecr
         {erreurEdition && <p className="message-erreur">{erreurEdition}</p>}
 
         <div ref={corps}>
-          {brouillon !== null ? (
-            <div className="editeur-note">
-              <textarea
-                value={brouillon}
-                onChange={(e) => setBrouillon(e.target.value)}
-                spellCheck
-                lang="fr"
-                aria-label="Contenu de la note (Markdown)"
-                onKeyDown={(e) => {
-                  if (toucheCommande(e) && e.key.toLowerCase() === "s") {
-                    e.preventDefault();
-                    enregistrer();
-                  }
-                }}
-              />
-              <div className="rangee">
-                <button className="bouton bouton-principal" disabled={brouillon === note.contenu} onClick={enregistrer}>
-                  <Save size={15} aria-hidden /> Enregistrer
-                </button>
-                <button className="bouton" onClick={() => (setBrouillon(null), setErreurEdition(null))}>
-                  <X size={15} aria-hidden /> Fermer sans enregistrer
-                </button>
-                <span className="texte-doux petit">{TOUCHE_COMMANDE} S pour enregistrer. Syntaxe Markdown d'Obsidian.</span>
-              </div>
-            </div>
-          ) : note.genre === "schema" ? (
+          {note.genre === "schema" ? (
             <div className="schema">
               <Dessin scene={extraireScene(note.contenu)} titre={note.titre} />
               <p className="texte-doux petit">Légendes du schéma :</p>

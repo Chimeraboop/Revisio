@@ -214,13 +214,131 @@ pub fn enregistrer_note(etat: State<Etat>, chemin: String, contenu: String, avan
         maintenant: maintenant_ms(),
         groupe: None,
     };
+    // L'éditeur travaille avec des retours à la ligne « \n » : on compare sans tenir compte des « \r\n »
+    // de Windows, et on garde ceux de la note si elle en avait.
+    let normaliser = |t: &str| t.replace("\r\n", "\n");
+    let actuel = vault::lire_texte(&racine, &chemin)?;
+    let crlf = actuel.contains("\r\n");
+    let avant = normaliser(&avant);
     let pareille = |octets: &[u8]| {
         let texte = String::from_utf8_lossy(octets);
-        texte.strip_prefix('\u{feff}').unwrap_or(&texte) == avant
+        normaliser(texte.strip_prefix('\u{feff}').unwrap_or(&texte)) == avant
     };
-    // Garde les fins de ligne Windows de la note si elle en avait.
-    let contenu = if avant.contains("\r\n") { contenu.replace("\r\n", "\n").replace('\n', "\r\n") } else { contenu };
-    ecriture::modifier(&etat.db.lock().unwrap(), &ctx, &chemin, &contenu, &pareille)
+    let contenu = if crlf { normaliser(&contenu).replace('\n', "\r\n") } else { contenu };
+    ecriture::modifier_en_seance(&etat.db.lock().unwrap(), &ctx, &chemin, &contenu, &pareille)
+}
+
+/// Image collée ou déposée dans une note (corps brut ; en-tête `x-note` = chemin de la note, encodé
+/// pour une adresse web). Rangée comme Obsidian le ferait, renvoie son nom pour `![[nom]]`.
+#[tauri::command]
+pub fn ajouter_image(app: AppHandle, etat: State<Etat>, request: tauri::ipc::Request) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(octets) = request.body() else {
+        return Err("Image attendue.".into());
+    };
+    if octets.len() > 20 * 1024 * 1024 {
+        return Err("Image trop lourde (plus de 20 Mo).".into());
+    }
+    let note = request
+        .headers()
+        .get("x-note")
+        .and_then(|v| v.to_str().ok())
+        .map(decoder_entete)
+        .ok_or("Note non précisée.")?;
+    enregistrer_image(&app, &etat, &note, octets)
+}
+
+/// Image choisie sur le disque (bouton « Ajouter une image ») : copiée comme pièce jointe.
+#[tauri::command]
+pub fn importer_image(app: AppHandle, etat: State<Etat>, note: String, source: String) -> Result<String, String> {
+    let taille = std::fs::metadata(&source).map_err(|e| format!("Image introuvable : {e}"))?.len();
+    if taille > 20 * 1024 * 1024 {
+        return Err("Image trop lourde (plus de 20 Mo).".into());
+    }
+    let octets = std::fs::read(&source).map_err(|e| format!("Lecture de l'image : {e}"))?;
+    enregistrer_image(&app, &etat, &note, &octets)
+}
+
+fn enregistrer_image(app: &AppHandle, etat: &Etat, note: &str, octets: &[u8]) -> Result<String, String> {
+    // Le format vient du contenu, pas du nom donné par le presse-papiers.
+    let extension = if octets.starts_with(&[0x89, b'P', b'N', b'G']) {
+        "png"
+    } else if octets.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "jpg"
+    } else if octets.starts_with(b"GIF8") {
+        "gif"
+    } else if octets.len() > 12 && &octets[..4] == b"RIFF" && &octets[8..12] == b"WEBP" {
+        "webp"
+    } else {
+        return Err("Format d'image non reconnu (PNG, JPEG, GIF ou WebP).".into());
+    };
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let dossier = dossier_pieces_jointes(&racine, note);
+    let horodatage = chrono::Local::now().format("%Y%m%d%H%M%S");
+    let mut nom = String::new();
+    let mut chemin = String::new();
+    for n in 1..100 {
+        nom = if n == 1 {
+            format!("Image collée {horodatage}.{extension}")
+        } else {
+            format!("Image collée {horodatage} {n}.{extension}")
+        };
+        chemin = if dossier.is_empty() { nom.clone() } else { format!("{dossier}/{nom}") };
+        if !racine.join(&chemin).exists() {
+            break;
+        }
+    }
+    ecriture::creer_piece_jointe(&etat.db.lock().unwrap(), &contexte_manuel(&racine, &reglages, None, None), &chemin, octets)?;
+    lancer_indexation(app);
+    Ok(nom)
+}
+
+/// En-tête HTTP encodé comme une adresse web (`%C3%A9` → « é »).
+fn decoder_entete(texte: &str) -> String {
+    let octets = texte.as_bytes();
+    let mut sortie = Vec::with_capacity(octets.len());
+    let mut i = 0;
+    while i < octets.len() {
+        if octets[i] == b'%' && i + 2 < octets.len() {
+            if let Ok(v) = u8::from_str_radix(&texte[i + 1..i + 3], 16) {
+                sortie.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        sortie.push(octets[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&sortie).into_owned()
+}
+
+/// Dossier des images jointes : celui réglé dans Obsidian (`attachmentFolderPath` de
+/// `.obsidian/app.json` : racine par défaut, « ./ » = dossier de la note), sinon `_Assets`.
+fn dossier_pieces_jointes(racine: &Path, note: &str) -> String {
+    let dossier_note = note.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
+    if !settings::est_vault_obsidian(racine) {
+        return "_Assets".into();
+    }
+    let reglage = vault::lire_texte(racine, ".obsidian/app.json")
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("attachmentFolderPath").and_then(|p| p.as_str()).map(str::to_string))
+        .unwrap_or_default();
+    let reglage = reglage.trim().trim_end_matches('/');
+    let combiner = |a: &str, b: &str| match (a.is_empty(), b.is_empty()) {
+        (true, _) => b.to_string(),
+        (_, true) => a.to_string(),
+        _ => format!("{a}/{b}"),
+    };
+    if reglage.is_empty() || reglage == "/" {
+        String::new()
+    } else if reglage == "." {
+        dossier_note
+    } else if let Some(sous) = reglage.strip_prefix("./") {
+        combiner(&dossier_note, sous)
+    } else {
+        reglage.trim_start_matches('/').to_string()
+    }
 }
 
 // ---------- Gestion des notes et dossiers (écriture autorisée seulement) ----------
@@ -2304,4 +2422,35 @@ fn modifier_reglages(etat: &Etat, modif: impl FnOnce(&mut Reglages)) -> Result<R
     settings::enregistrer(&etat.dossier, &nouveaux)?;
     *reglages = nouveaux.clone();
     Ok(nouveaux)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entete_decode() {
+        assert_eq!(decoder_entete("Sp%C3%A9%20SVT%2FNote.md"), "Spé SVT/Note.md");
+        assert_eq!(decoder_entete("100%"), "100%");
+    }
+
+    #[test]
+    fn dossier_des_images_comme_obsidian() {
+        let racine = std::env::temp_dir().join(format!("revisio-test-pj-{}", std::process::id()));
+        std::fs::create_dir_all(&racine).unwrap();
+        // Dossier qui n'est pas un vault Obsidian : _Assets.
+        assert_eq!(dossier_pieces_jointes(&racine, "SVT/Note.md"), "_Assets");
+        std::fs::create_dir_all(racine.join(".obsidian")).unwrap();
+        // Vault Obsidian sans réglage : racine (comportement d'Obsidian).
+        assert_eq!(dossier_pieces_jointes(&racine, "SVT/Note.md"), "");
+        let regler = |v: &str| std::fs::write(racine.join(".obsidian").join("app.json"), format!("{{\"attachmentFolderPath\":\"{v}\"}}")).unwrap();
+        regler("./");
+        assert_eq!(dossier_pieces_jointes(&racine, "SVT/Chap/Note.md"), "SVT/Chap");
+        regler("./images");
+        assert_eq!(dossier_pieces_jointes(&racine, "SVT/Chap/Note.md"), "SVT/Chap/images");
+        assert_eq!(dossier_pieces_jointes(&racine, "Note.md"), "images");
+        regler("_Assets");
+        assert_eq!(dossier_pieces_jointes(&racine, "SVT/Note.md"), "_Assets");
+        std::fs::remove_dir_all(&racine).unwrap();
+    }
 }

@@ -216,6 +216,8 @@ pub fn run() {
             commandes::supprimer_element,
             commandes::corbeille,
             commandes::restaurer,
+            commandes::ajouter_image,
+            commandes::importer_image,
             commandes::importer_photos,
             commandes::relancer_lot_photos,
             commandes::lots_photos,
