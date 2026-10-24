@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Révisio — tes notes Obsidian deviennent des révisions</title>
-  <meta name="description" content="Révisio lit ton vault Obsidian, en tire des cartes de révision et te prépare chaque jour une séance sur mesure. Tes photos de cours peuvent même devenir des notes. Pour Windows 10 et 11, hors ligne d'abord.">
+  <meta name="description" content="Révisio lit ton vault Obsidian, en tire des cartes de révision et te prépare chaque jour une séance sur mesure. Tes photos de cours peuvent même devenir des notes. Pour Windows 10 et 11, et Mac en version expérimentale. Hors ligne d\'abord.">
   <meta property="og:title" content="Révisio">
-  <meta property="og:description" content="Tes notes Obsidian deviennent des révisions. Pour Windows, hors ligne d'abord.">
+  <meta property="og:description" content="Tes notes Obsidian deviennent des révisions. Pour Windows et Mac, hors ligne d'abord.">
   <meta property="og:image" content="images/logo-256.png">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="images/logo.png">
@@ -56,11 +56,11 @@
         <div class="actions apparait-chargement" style="--d: 6">
           <a class="bouton" href="#telecharger">
             <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            Télécharger pour Windows
+            Télécharger
           </a>
           <a class="bouton bouton-contour" href="#fonctionnement">Voir comment ça marche</a>
         </div>
-        <p class="note-version apparait-chargement" style="--d: 7">Version 0.10.0, Windows 10 et 11, installation sans droits administrateur.</p>
+        <p class="note-version apparait-chargement" style="--d: 7">Version 0.10.0 pour Windows 10 et 11, et pour Mac en version expérimentale.</p>
       </div>
 
       <div class="paquet" aria-label="Exemple de carte de vocabulaire : die Erinnerung, le souvenir">
@@ -346,7 +346,7 @@
           <div class="moteur-texte" aria-live="polite">
             <div class="moteur-vue actif" data-moteur="en-ligne">
               <h3>Gemini, avec ta propre clé.</h3>
-              <p>La clé reste dans le Gestionnaire d'identification de Windows et ne passe jamais par l'interface. Les générations tournent en arrière-plan : tu peux changer d'écran ou tout arrêter d'un clic.</p>
+              <p>La clé reste dans le coffre à secrets de ton ordinateur (Gestionnaire d'identification de Windows, Trousseau sur Mac) et ne passe jamais par l'interface. Les générations tournent en arrière-plan : tu peux changer d'écran ou tout arrêter d'un clic.</p>
             </div>
             <div class="moteur-vue" data-moteur="local">
               <h3>Ollama, sur ton ordinateur.</h3>
@@ -359,7 +359,7 @@
 
     <!-- Confidentialité -->
     <section class="confidentialite" id="confidentialite">
-      <p class="declaration" data-mots>Ton vault reste en lecture seule tant que tu ne dis pas le contraire. Tes révisions restent sur ton ordinateur. Ta clé reste dans le coffre de Windows.</p>
+      <p class="declaration" data-mots>Ton vault reste en lecture seule tant que tu ne dis pas le contraire. Tes révisions restent sur ton ordinateur. Ta clé reste dans le coffre de ton système.</p>
 
       <dl class="details-confiance">
         <div>
@@ -368,7 +368,7 @@
         </div>
         <div>
           <dt>Tes données au même endroit</dt>
-          <dd>Cartes, séances et réglages sont rangés dans <code>%APPDATA%\Revisio</code>. Rien sur un serveur.</dd>
+          <dd>Cartes, séances et réglages restent sur ton ordinateur, dans le dossier des données de Révisio. Rien sur un serveur.</dd>
         </div>
         <div>
           <dt>Internet seulement si tu le veux</dt>
@@ -384,16 +384,29 @@
         <span class="reflet"></span>
       </div>
       <h2 class="titre-section">Commence ta première séance ce soir.</h2>
-      <a class="bouton bouton-grand" href="https://github.com/Chimeraboop/Revisio/releases/latest">
-        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-        Télécharger Révisio 0.10.0
-      </a>
-      <ul class="prerequis">
-        <li>Windows 10 ou 11, 64 bits</li>
-        <li>Installeur de 7 Mo</li>
-        <li>Sans droits administrateur</li>
-        <li>Un vault Obsidian</li>
-      </ul>
+      <div class="choix-systeme">
+        <div class="systeme">
+          <a class="bouton bouton-grand" href="https://github.com/Chimeraboop/Revisio/releases/download/v0.10.0/Revisio_0.10.0_x64-setup.exe">
+            <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            Pour Windows
+          </a>
+          <ul class="prerequis">
+            <li>Windows 10 ou 11, 64 bits</li>
+            <li>Installeur de 8 Mo, sans droits administrateur</li>
+          </ul>
+        </div>
+        <div class="systeme">
+          <a class="bouton bouton-grand bouton-contour" href="https://github.com/Chimeraboop/Revisio/releases/download/v0.10.0/Revisio_0.10.0_macOS-experimental.dmg">
+            <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            Pour Mac (expérimental)
+          </a>
+          <ul class="prerequis">
+            <li>macOS 13 ou plus, puce Apple ou Intel</li>
+            <li>Pas encore essayée sur un vrai Mac</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note-mac">Un vault Obsidian est nécessaire. Sur Mac, au premier lancement, macOS bloque l'app car elle n'est pas signée par Apple : ouvre Réglages Système, Confidentialité et sécurité, puis clique sur « Ouvrir quand même ». <a href="https://github.com/Chimeraboop/Revisio/releases/latest">Toutes les versions</a></p>
     </section>
   </main>
 

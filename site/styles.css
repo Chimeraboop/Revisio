@@ -636,6 +636,11 @@ code { font-family: Consolas, "Cascadia Mono", monospace; font-size: .92em; back
   mix-blend-mode: overlay;
   pointer-events: none;
 }
+.choix-systeme { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px 40px; }
+.systeme { display: flex; flex-direction: column; align-items: center; }
+.systeme .prerequis { margin-top: 18px; flex-direction: column; align-items: center; gap: 6px; }
+.note-mac { margin-top: 36px; max-width: 46em; font-size: 14px; color: var(--texte-doux); }
+.note-mac a { color: var(--texte); }
 .prerequis {
   list-style: none; padding: 0; margin: 32px 0 0;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px;
