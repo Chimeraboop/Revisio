@@ -565,7 +565,7 @@ fn singulier(t: &str) -> String {
         .join(" ")
 }
 
-fn sans_accents(t: &str) -> String {
+pub(super) fn sans_accents(t: &str) -> String {
     t.chars()
         .flat_map(|c| {
             let r: &str = match c {

@@ -1288,11 +1288,11 @@ async fn generer_questions_(
         };
         // La réponse est refusée (et redemandée) si aucune question n'est correctement ancrée.
         let valider = |l: &LotQuestions| {
-            if l.questions.iter().any(|q| questions::defaut(q, lot).is_none()) {
+            let raisons: Vec<String> = l.questions.iter().filter_map(|q| questions::preparer(q.clone(), lot).err()).collect();
+            if raisons.len() < l.questions.len() {
                 Ok(())
             } else {
-                let raisons: Vec<String> = l.questions.iter().filter_map(|q| questions::defaut(q, lot)).take(3).collect();
-                Err(format!("aucune question valide ({})", raisons.join(" ; ")))
+                Err(format!("aucune question valide ({})", raisons[..raisons.len().min(3)].join(" ; ")))
             }
         };
         resultat.appels += 1;
@@ -1300,10 +1300,16 @@ async fn generer_questions_(
         let (reponse, modele) =
             etat.ia.appeler_json_simple(&etat.db, "questions", etat.limites_ia(), local.as_ref(), &requete, valider).await?;
         resultat.modele = modele.clone();
-        let (bonnes, mauvaises): (Vec<_>, Vec<_>) =
-            reponse.questions.into_iter().partition(|q| questions::defaut(q, lot).is_none());
-        resultat.rejetees += mauvaises.len();
-        resultat.raisons.extend(mauvaises.iter().filter_map(|q| questions::defaut(q, lot)));
+        let mut bonnes = Vec::new();
+        for q in reponse.questions {
+            match questions::preparer(q, lot) {
+                Ok(q) => bonnes.push(q),
+                Err(raison) => {
+                    resultat.rejetees += 1;
+                    resultat.raisons.push(raison);
+                }
+            }
+        }
         resultat.creees += questions::enregistrer(
             &mut etat.db.lock().unwrap(),
             &modele,
