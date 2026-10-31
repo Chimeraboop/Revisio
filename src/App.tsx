@@ -10,6 +10,7 @@ import {
   Layers,
   LayoutDashboard,
   LoaderCircle,
+  MessagesSquare,
   type LucideIcon,
   Network,
   NotebookPen,
@@ -28,6 +29,7 @@ import GardeFou from "./GardeFou";
 import { IndicateurTaches, NotificationsTaches } from "./composants/TachesIa";
 import AccueilVue from "./views/AccueilVue";
 import AtelierIaVue from "./views/AtelierIaVue";
+import DiscussionVue from "./discussion/DiscussionVue";
 import CarnetVue from "./views/CarnetVue";
 import CartesMentalesVue from "./views/CartesMentalesVue";
 import EspaceWebVue from "./views/EspaceWebVue";
@@ -51,6 +53,7 @@ type Vue =
   | "planning"
   | "carnet"
   | "atelier"
+  | "discussion"
   | "exercices"
   | "cartes"
   | "podcasts"
@@ -83,6 +86,7 @@ const NAVIGATION: { groupe: string; liens: LienNav[] }[] = [
     groupe: "Créer avec l'IA",
     liens: [
       { vue: "atelier", libelle: "Atelier IA", icone: Sparkles },
+      { vue: "discussion", libelle: "Discuter avec l'IA", icone: MessagesSquare },
       { vue: "exercices", libelle: "Exercices type bac", icone: ClipboardList },
       { vue: "cartes", libelle: "Cartes mentales", icone: Network },
       { vue: "podcasts", libelle: "Podcasts", icone: Headphones },
@@ -124,6 +128,7 @@ export default function App() {
   const [demandeSeance, setDemandeSeance] = useState<DemandeSeance | null>(null);
   const [demandeExamen, setDemandeExamen] = useState<{ chapitres: ChapitreChoisi[] } | null>(null);
   const [demandeCarte, setDemandeCarte] = useState<ChapitreChoisi | null>(null);
+  const [demandeConversation] = useState<{ conversationId: number } | null>(null);
   const demander = (d: DemandeSeance) => {
     setDemandeSeance(d);
     setVue("reviser");
@@ -351,6 +356,12 @@ export default function App() {
           <PodcastsVue onOuvrirNote={(chemin) => ouvrirNote(chemin)} onReglages={() => setVue("reglages")} />
         ) : vue === "videos" ? (
           <VideosVue onOuvrirNote={(chemin) => ouvrirNote(chemin)} onReglages={() => setVue("reglages")} />
+        ) : vue === "discussion" ? (
+          <DiscussionVue
+            ouvrirNote={(chemin) => ouvrirNote(chemin)}
+            onReglages={() => setVue("reglages")}
+            demande={demandeConversation}
+          />
         ) : vue === "photos" ? (
           <PhotosVue
             reglages={reglages}

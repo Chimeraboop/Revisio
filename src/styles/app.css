@@ -4740,3 +4740,440 @@ summary.callout-titre {
   font-family: Consolas, "Cascadia Mono", monospace !important;
   color: var(--texte-doux) !important;
 }
+
+/* ---------- Discuter avec l'IA ---------- */
+.discussion.page-large {
+  max-width: 1280px;
+}
+
+.discussion-grille {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.discussion-liste {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  max-height: calc(100vh - 150px);
+  overflow: hidden;
+}
+
+.discussion-onglets {
+  display: flex;
+}
+
+.discussion-onglets .segment {
+  flex: 1;
+  justify-content: center;
+}
+
+.champ-recherche {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.champ-recherche .icone {
+  position: absolute;
+  left: 10px;
+  color: var(--texte-doux);
+  pointer-events: none;
+}
+
+.champ-recherche .champ {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.liste-conversations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conversation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  border-radius: var(--rayon-petit);
+}
+
+.conversation-item:hover {
+  background: var(--fond-survol);
+}
+
+.conversation-item.actif {
+  background: var(--fond-actif);
+}
+
+.conversation-titre {
+  font-weight: 500;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-infos {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discussion-conversation {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  height: calc(100vh - 150px);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.conversation-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.conversation-entete .titre-bloc {
+  margin: 0;
+  gap: 6px;
+}
+
+.fil-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.bulle {
+  max-width: 88%;
+  border-radius: 14px;
+  padding: 10px 14px;
+  line-height: 1.6;
+}
+
+.bulle-eleve {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-texte);
+  white-space: pre-wrap;
+  border-bottom-right-radius: 4px;
+}
+
+.bulle-ia {
+  align-self: flex-start;
+  max-width: 100%;
+  width: 100%;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+  border-bottom-left-radius: 4px;
+}
+
+.bulle-ia .markdown > :first-child {
+  margin-top: 0;
+}
+
+.bulle-ia .markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.bulle-pied {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bordure);
+}
+
+.sources-citees {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.puce-source {
+  border: 1px solid var(--bordure);
+  background: var(--fond-panneau);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  color: var(--texte);
+}
+
+.puce-source:hover {
+  border-color: var(--accent);
+}
+
+.curseur-ecriture {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--texte-doux);
+  animation: clignoter 1s steps(2) infinite;
+}
+
+@keyframes clignoter {
+  50% {
+    opacity: 0;
+  }
+}
+
+.zone-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--bordure);
+}
+
+.zone-question textarea {
+  resize: vertical;
+  min-height: 52px;
+  max-height: 220px;
+}
+
+/* Encadré « Hors de tes notes » écrit par l'IA */
+.callout-hors-notes {
+  --couleur-callout: 214, 140, 30;
+}
+
+/* Schémas et graphiques proposés */
+.proposition {
+  position: relative;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-petit);
+  background: var(--fond-panneau);
+}
+
+.proposition-titre {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.proposition-visuel {
+  overflow-x: auto;
+}
+
+.proposition.statut-proposee .proposition-visuel {
+  filter: blur(3px);
+  opacity: 0.55;
+  pointer-events: none;
+  max-height: 260px;
+  overflow: hidden;
+}
+
+.proposition-choix {
+  position: absolute;
+  inset: 44px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.proposition-choix p {
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--fond-panneau);
+}
+
+.proposition-refusee {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  color: var(--texte-doux);
+}
+
+.diagramme {
+  display: flex;
+  justify-content: center;
+}
+
+.diagramme svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.visuel-erreur pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.graphique-ia {
+  margin: 0;
+}
+
+.graphique .barre-0 { fill: var(--serie-1); }
+.graphique .barre-1 { fill: var(--serie-2); }
+.graphique .barre-2 { fill: var(--statut-bon); }
+.graphique .barre-3 { fill: var(--statut-alerte); }
+
+.legende-barres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.legende-barres .pastille {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legende-barres .pastille.barre-0 { background: var(--serie-1); }
+.legende-barres .pastille.barre-1 { background: var(--serie-2); }
+.legende-barres .pastille.barre-2 { background: var(--statut-bon); }
+.legende-barres .pastille.barre-3 { background: var(--statut-alerte); }
+
+/* Onglet Créations */
+.discussion-creations {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.grille-creations {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.creation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.titre-creation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.creation-visuel {
+  flex: 1;
+  overflow-x: auto;
+}
+
+/* Choix des sources */
+.fenetre:has(.choix-sources) {
+  width: min(680px, 100%);
+}
+
+.choix-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.source-matiere {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.source-titre-matiere {
+  padding: 4px 0;
+}
+
+.source-ligne {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0 3px 22px;
+}
+
+.source-ligne .case,
+.source-nom {
+  flex: 1;
+  min-width: 0;
+}
+
+.source-notes {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 6px 46px;
+}
+
+.fenetre-corps .source-notes label,
+.fenetre-corps .source-ligne label {
+  font-weight: 400;
+}
+
+@media (max-width: 900px) {
+  .discussion-grille {
+    grid-template-columns: 1fr;
+  }
+
+  .discussion-liste {
+    position: static;
+    max-height: 280px;
+  }
+}
+
+.graphique-sujet .point-cache {
+  fill: transparent;
+}
+
+.discussion-conversation {
+  height: calc(100vh - 250px);
+}
+
+.creation-visuel {
+  max-height: 460px;
+  overflow: auto;
+}
+
+.puce-source {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

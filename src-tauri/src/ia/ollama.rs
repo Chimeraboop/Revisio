@@ -73,6 +73,7 @@ impl Default for Ollama {
 /// arrondie au multiple de 4096, entre 8192 et 32768 (au-delà, une petite carte graphique sature).
 pub fn contexte_pour(r: &Requete) -> usize {
     let caracteres: usize = r.systeme.len()
+        + r.historique.iter().map(|t| t.texte.len()).sum::<usize>()
         + r.parties.iter().map(|p| if let Partie::Texte(t) = p { t.len() } else { 2000 }).sum::<usize>()
         + r.schema.as_ref().map_or(0, |s| s.to_string().len());
     (caracteres / 3 + JETONS_SORTIE).div_ceil(4096).clamp(2, 8) * 4096
@@ -90,6 +91,9 @@ pub fn corps_chat(r: &Requete, modele: &str, sans_reflexion: bool) -> Value {
     let mut messages = Vec::new();
     if !r.systeme.is_empty() {
         messages.push(json!({ "role": "system", "content": r.systeme }));
+    }
+    for t in &r.historique {
+        messages.push(json!({ "role": if t.ia { "assistant" } else { "user" }, "content": t.texte }));
     }
     messages.push(utilisateur);
     let mut options = json!({ "num_ctx": contexte_pour(r) });
@@ -224,6 +228,59 @@ impl Ollama {
         }
     }
 
+    /// Réponse lue au fil de l'eau (`stream: true`, une ligne JSON par morceau) : `flux` reçoit le texte
+    /// reçu jusqu'ici. Comme `generer`, redemande sans `think` si le modèle le refuse.
+    pub async fn generer_flux(
+        &self,
+        adresse: &str,
+        modele: &str,
+        requete: &Requete,
+        flux: &(dyn Fn(&str) + Sync),
+    ) -> Result<Reponse, ErreurIa> {
+        match self.chat_flux(adresse, corps_chat(requete, modele, true), modele, flux).await {
+            Err(ErreurIa::Locale(m)) if m.contains("think") => {
+                self.chat_flux(adresse, corps_chat(requete, modele, false), modele, flux).await
+            }
+            r => r,
+        }
+    }
+
+    async fn chat_flux(&self, adresse: &str, mut corps: Value, modele: &str, flux: &(dyn Fn(&str) + Sync)) -> Result<Reponse, ErreurIa> {
+        corps["stream"] = json!(true);
+        let mut reponse = self.http.post(format!("{adresse}/api/chat")).json(&corps).send().await.map_err(erreur_reseau)?;
+        let statut = reponse.status().as_u16();
+        if statut != 200 {
+            let corps: Value = reponse.json().await.unwrap_or_default();
+            return Err(erreur_http(statut, &corps, modele));
+        }
+        let (mut texte, mut entree, mut sortie) = (String::new(), 0, 0);
+        let mut reste: Vec<u8> = Vec::new();
+        while let Some(morceau) = reponse.chunk().await.map_err(erreur_reseau)? {
+            reste.extend_from_slice(&morceau);
+            while let Some(fin) = reste.iter().position(|&o| o == b'\n') {
+                let ligne: Vec<u8> = reste.drain(..=fin).collect();
+                let Ok(v) = serde_json::from_slice::<Value>(&ligne) else { continue };
+                if let Some(e) = v["error"].as_str() {
+                    return Err(ErreurIa::Locale(e.to_string()));
+                }
+                if let Some(t) = v["message"]["content"].as_str() {
+                    if !t.is_empty() {
+                        texte.push_str(t);
+                        flux(&texte);
+                    }
+                }
+                if v["done"] == true {
+                    entree = v["prompt_eval_count"].as_i64().unwrap_or(0);
+                    sortie = v["eval_count"].as_i64().unwrap_or(0);
+                }
+            }
+        }
+        if texte.trim().is_empty() {
+            return Err(ErreurIa::Format("réponse vide".into()));
+        }
+        Ok(Reponse { texte, jetons_entree: entree, jetons_sortie: sortie })
+    }
+
     /// Télécharge un modèle (`POST /api/pull`, réponses ligne par ligne). `suivre` reçoit l'avancement ;
     /// s'il renvoie `false`, le téléchargement s'arrête (Ollama le reprendra là où il en était).
     pub async fn telecharger(
@@ -317,12 +374,18 @@ mod tests {
             ],
             schema: Some(json!({ "type": "object" })),
             temperature: Some(0.3),
+            historique: vec![
+                crate::ia::gemini::Tour { ia: false, texte: "Avant".into() },
+                crate::ia::gemini::Tour { ia: true, texte: "Réponse".into() },
+            ],
         };
         let c = corps_chat(&r, "qwen3.5:4b", true);
         assert_eq!(c["model"], "qwen3.5:4b");
         assert_eq!(c["messages"][0], json!({ "role": "system", "content": "Consignes" }));
-        assert_eq!(c["messages"][1]["content"], "Bonjour\n\nRéponds de nouveau.");
-        assert_eq!(c["messages"][1]["images"], json!(["AAA"]));
+        assert_eq!(c["messages"][1], json!({ "role": "user", "content": "Avant" }));
+        assert_eq!(c["messages"][2], json!({ "role": "assistant", "content": "Réponse" }));
+        assert_eq!(c["messages"][3]["content"], "Bonjour\n\nRéponds de nouveau.");
+        assert_eq!(c["messages"][3]["images"], json!(["AAA"]));
         assert_eq!((c["stream"].clone(), c["think"].clone()), (json!(false), json!(false)));
         assert_eq!(c["format"], json!({ "type": "object" }));
         assert_eq!(c["options"]["num_ctx"], 8192);

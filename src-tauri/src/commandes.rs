@@ -1285,6 +1285,7 @@ async fn generer_questions_(
             ))],
             schema: Some(questions::schema(par_lot)),
             temperature: Some(0.7),
+            historique: Vec::new(),
         };
         // La réponse est refusée (et redemandée) si aucune question n'est correctement ancrée.
         let valider = |l: &LotQuestions| {
@@ -1353,6 +1354,7 @@ async fn corriger_reponse_(etat: &Etat, carte_id: i64, reponse: String) -> Resul
         parties: vec![Partie::Texte(correction::consigne_correction(&carte.question, &carte.reponse, &extrait, &reponse))],
         schema: Some(correction::schema_correction()),
         temperature: Some(0.2),
+        historique: Vec::new(),
     };
     let local = etat.config_locale();
     let (mut resultat, modele) = etat
@@ -1446,6 +1448,7 @@ async fn evaluer_feynman_(
         ))],
         schema: Some(correction::schema_feynman()),
         temperature: Some(0.2),
+        historique: Vec::new(),
     };
     let local = etat.config_locale();
     let (mut retour, modele) = etat
@@ -1693,6 +1696,7 @@ async fn generer_questions_schema_(
         ],
         schema: Some(vision::schema_json()),
         temperature: Some(0.5),
+        historique: Vec::new(),
     };
     // Refusé (et redemandé) si aucune question ne porte sur une légende réelle du schéma.
     let valider = |l: &vision::LotVision| {
@@ -1777,6 +1781,7 @@ async fn generer_carte_mentale_(
         ))],
         schema: Some(cartes_mentales::schema()),
         temperature: Some(0.3),
+        historique: Vec::new(),
     };
     let local = etat.config_locale();
     let (carte, modele) = etat
@@ -1855,6 +1860,7 @@ async fn ecrire_podcast_(
         ))],
         schema: Some(podcasts::schema()),
         temperature: Some(0.8),
+        historique: Vec::new(),
     };
     let script = etat
         .ia
@@ -2048,6 +2054,7 @@ async fn ecrire_video_(
         ))],
         schema: Some(videos::schema_json()),
         temperature: Some(0.6),
+        historique: Vec::new(),
     };
     let script = etat
         .ia
@@ -2265,6 +2272,7 @@ async fn generer_sujet_(
         ))],
         schema: Some(exercices::schema_sujet()),
         temperature: Some(0.8),
+        historique: Vec::new(),
     };
     let ids: Vec<String> = extraits.iter().map(|e| e.id.clone()).collect();
     let mut sujet = etat
@@ -2392,6 +2400,7 @@ async fn corriger_redactions_(etat: &Etat, copie_id: i64) -> Result<ia::copies::
         ))],
         schema: Some(exercices::schema_correction()),
         temperature: Some(0.2),
+        historique: Vec::new(),
     };
     let correction = etat
         .ia

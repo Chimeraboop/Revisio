@@ -29,9 +29,13 @@ const format = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
 export default function Graphique({
   graphique,
   valeursAuSurvol = false,
+  lisse = false,
 }: {
   graphique: GraphiqueSujet;
   valeursAuSurvol?: boolean;
+  /** Courbe d'une fonction (beaucoup de points calculés) : les points ne sont pas dessinés, seulement
+   *  repérables au survol. */
+  lisse?: boolean;
 }) {
   const [survol, setSurvol] = useState<{ x: number; y: number; serie: string; px: number; py: number } | null>(null);
   const points = graphique.series.flatMap((s) => s.points);
@@ -100,7 +104,7 @@ export default function Graphique({
               {tries.map(([x, y]) => (
                 <circle
                   key={`${x}-${y}`}
-                  className="point"
+                  className={lisse && !(survol?.px === px(x) && survol?.py === py(y)) ? "point point-cache" : "point"}
                   cx={px(x)}
                   cy={py(y)}
                   r={survol?.px === px(x) && survol?.py === py(y) ? 6 : 4}

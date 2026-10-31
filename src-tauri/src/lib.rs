@@ -8,6 +8,7 @@ pub mod calcul;
 pub mod cartes;
 pub mod cartes_mentales;
 pub mod db;
+pub mod discussion;
 pub mod ecriture;
 pub mod ia;
 pub mod indexer;
@@ -244,6 +245,19 @@ pub fn run() {
             commandes::definir_reglages_revision,
             commandes::resume_revision,
             commandes::preparer_seance,
+            discussion::liste_conversations,
+            discussion::creer_conversation,
+            discussion::ouvrir_conversation,
+            discussion::renommer_conversation,
+            discussion::supprimer_conversation,
+            discussion::definir_sources_conversation,
+            discussion::envoyer_message,
+            discussion::relancer_reponse,
+            discussion::decider_creation,
+            discussion::creations_ia,
+            discussion::renommer_creation,
+            discussion::retirer_creation,
+            discussion::points_fonction,
             commandes::definir_matieres_exclues,
             commandes::enregistrer_revision,
             commandes::suspendre_carte,

@@ -236,6 +236,7 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         parties,
         schema: Some(ia_photos::schema_reperage()),
         temperature: Some(0.2),
+        historique: Vec::new(),
     };
     let reperage: Reperage = etat
         .ia

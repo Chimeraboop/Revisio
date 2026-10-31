@@ -20,6 +20,16 @@ pub struct Requete {
     /// Schéma JSON attendu en sortie (sortie structurée).
     pub schema: Option<Value>,
     pub temperature: Option<f32>,
+    /// Échanges précédents d'une conversation (avant `parties`, qui est le nouveau message de l'élève).
+    pub historique: Vec<Tour>,
+}
+
+/// Un message déjà échangé dans une conversation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tour {
+    /// `true` : réponse de l'IA ; `false` : message de l'élève.
+    pub ia: bool,
+    pub texte: String,
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +191,40 @@ impl Gemini {
         lire_reponse(&corps)
     }
 
+    /// Réponse lue au fil de l'eau (`streamGenerateContent`, évènements SSE) : `flux` reçoit le texte reçu
+    /// jusqu'ici à chaque morceau (le texte complet, pas seulement le nouveau morceau).
+    pub async fn generer_flux(&self, cle: &str, requete: &Requete, flux: &(dyn Fn(&str) + Sync)) -> Result<Reponse, ErreurIa> {
+        let url = format!("{BASE}/models/{}:streamGenerateContent?alt=sse", requete.modele);
+        let mut reponse = self
+            .http
+            .post(url)
+            .header("x-goog-api-key", cle)
+            .json(&corps_requete(requete))
+            .send()
+            .await
+            .map_err(erreur_reseau)?;
+        let statut = reponse.status().as_u16();
+        if statut != 200 {
+            let corps: Value = reponse.json().await.unwrap_or_default();
+            return Err(erreur_http(statut, &corps));
+        }
+        let mut lecture = LectureFlux::default();
+        let mut reste: Vec<u8> = Vec::new();
+        while let Some(morceau) = reponse.chunk().await.map_err(erreur_reseau)? {
+            reste.extend_from_slice(&morceau);
+            while let Some(fin) = reste.iter().position(|&o| o == b'\n') {
+                let ligne: Vec<u8> = reste.drain(..=fin).collect();
+                if lecture.ligne(&String::from_utf8_lossy(&ligne))? {
+                    flux(&lecture.texte);
+                }
+            }
+        }
+        if lecture.ligne(&String::from_utf8_lossy(&reste))? {
+            flux(&lecture.texte);
+        }
+        lecture.terminer()
+    }
+
     /// Voix de synthèse : `store: false`, Google ne conserve pas l'échange.
     pub async fn generer_voix(&self, cle: &str, requete: &RequeteVoix) -> Result<ReponseVoix, ErreurIa> {
         let reponse = self
@@ -243,8 +287,14 @@ pub fn corps_requete(r: &Requete) -> Value {
     if let Some(t) = r.temperature {
         config["temperature"] = json!(t);
     }
+    let mut contenus: Vec<Value> = r
+        .historique
+        .iter()
+        .map(|t| json!({ "role": if t.ia { "model" } else { "user" }, "parts": [{ "text": t.texte }] }))
+        .collect();
+    contenus.push(json!({ "role": "user", "parts": parties }));
     let mut corps = json!({
-        "contents": [{ "role": "user", "parts": parties }],
+        "contents": contenus,
         "generationConfig": config,
     });
     if !r.systeme.is_empty() {
@@ -311,6 +361,61 @@ pub fn lire_modeles(corps: &Value) -> Vec<ModeleInfo> {
         .unwrap_or_default();
     modeles.sort_by(|a, b| a.id.cmp(&b.id));
     modeles
+}
+
+/// Assemble une réponse envoyée par morceaux (lignes « data: {…} » du flux SSE de Gemini).
+#[derive(Default)]
+pub struct LectureFlux {
+    pub texte: String,
+    jetons_entree: i64,
+    jetons_sortie: i64,
+    fin: Option<String>,
+}
+
+impl LectureFlux {
+    /// Lit une ligne du flux ; `Ok(true)` si du texte s'est ajouté.
+    pub fn ligne(&mut self, ligne: &str) -> Result<bool, ErreurIa> {
+        let Some(donnees) = ligne.trim().strip_prefix("data:") else { return Ok(false) };
+        let Ok(v) = serde_json::from_str::<Value>(donnees.trim()) else { return Ok(false) };
+        if let Some(raison) = v["promptFeedback"]["blockReason"].as_str() {
+            return Err(ErreurIa::Bloque(raison.to_string()));
+        }
+        if let Some(e) = v["error"]["message"].as_str() {
+            return Err(ErreurIa::Serveur(e.to_string()));
+        }
+        let candidat = &v["candidates"][0];
+        let mut ajout = false;
+        for p in candidat["content"]["parts"].as_array().into_iter().flatten() {
+            if p["thought"] != true {
+                if let Some(t) = p["text"].as_str() {
+                    self.texte.push_str(t);
+                    ajout |= !t.is_empty();
+                }
+            }
+        }
+        if let Some(f) = candidat["finishReason"].as_str() {
+            self.fin = Some(f.to_string());
+        }
+        if let Some(n) = v["usageMetadata"]["promptTokenCount"].as_i64() {
+            self.jetons_entree = n;
+        }
+        if let Some(n) = v["usageMetadata"]["candidatesTokenCount"].as_i64() {
+            self.jetons_sortie = n;
+        }
+        Ok(ajout)
+    }
+
+    pub fn terminer(self) -> Result<Reponse, ErreurIa> {
+        if self.texte.trim().is_empty() {
+            let raison = self.fin.unwrap_or_else(|| "réponse vide".into());
+            return Err(if matches!(raison.as_str(), "SAFETY" | "PROHIBITED_CONTENT" | "BLOCKLIST" | "RECITATION") {
+                ErreurIa::Bloque(raison)
+            } else {
+                ErreurIa::Format(raison)
+            });
+        }
+        Ok(Reponse { texte: self.texte, jetons_entree: self.jetons_entree, jetons_sortie: self.jetons_sortie })
+    }
 }
 
 fn erreur_reseau(e: reqwest::Error) -> ErreurIa {
@@ -475,12 +580,32 @@ mod tests {
             ],
             schema: Some(json!({ "type": "object" })),
             temperature: Some(0.3),
+            historique: vec![Tour { ia: false, texte: "Avant".into() }, Tour { ia: true, texte: "Réponse".into() }],
         };
         let c = corps_requete(&r);
         assert_eq!(c["systemInstruction"]["parts"][0]["text"], "Consignes");
-        assert_eq!(c["contents"][0]["parts"][1]["inlineData"]["mimeType"], "image/png");
+        // Conversation : les échanges précédents d'abord (élève = user, IA = model), puis le nouveau message.
+        assert_eq!(c["contents"][0], json!({ "role": "user", "parts": [{ "text": "Avant" }] }));
+        assert_eq!(c["contents"][1]["role"], "model");
+        assert_eq!(c["contents"][2]["parts"][1]["inlineData"]["mimeType"], "image/png");
         assert_eq!(c["generationConfig"]["responseMimeType"], "application/json");
         assert_eq!(c["generationConfig"]["responseJsonSchema"]["type"], "object");
+    }
+
+    #[test]
+    fn reponse_au_fil_de_l_eau() {
+        let mut l = LectureFlux::default();
+        assert!(!l.ligne("").unwrap());
+        assert!(l.ligne(r#"data: {"candidates":[{"content":{"parts":[{"text":"je pense","thought":true},{"text":"Bon"}]}}]}"#).unwrap());
+        assert!(l.ligne(r#"data: {"candidates":[{"content":{"parts":[{"text":"jour"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":2}}"#).unwrap());
+        assert_eq!(l.texte, "Bonjour");
+        let r = l.terminer().unwrap();
+        assert_eq!((r.texte.as_str(), r.jetons_entree, r.jetons_sortie), ("Bonjour", 7, 2));
+        let mut bloque = LectureFlux::default();
+        assert!(matches!(bloque.ligne(r#"data: {"promptFeedback":{"blockReason":"SAFETY"}}"#), Err(ErreurIa::Bloque(_))));
+        let mut vide = LectureFlux::default();
+        vide.ligne(r#"data: {"candidates":[{"finishReason":"SAFETY"}]}"#).unwrap();
+        assert!(matches!(vide.terminer(), Err(ErreurIa::Bloque(_))));
     }
 
     #[test]

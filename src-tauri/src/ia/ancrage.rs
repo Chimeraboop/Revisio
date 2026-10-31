@@ -39,6 +39,44 @@ pub fn extraits_du_chapitre(conn: &Connection, matiere: &str, chapitre: Option<&
     construire(lignes.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// Extraits d'une seule note (source choisie dans une conversation).
+pub fn extraits_de_la_note(conn: &Connection, chemin: &str) -> rusqlite::Result<Vec<Extrait>> {
+    let mut req = conn.prepare(
+        "SELECT n.chemin, n.titre, s.titre, s.texte, s.genre
+         FROM sections s JOIN notes n ON n.id = s.note_id
+         WHERE n.chemin = ?1 ORDER BY s.ordre",
+    )?;
+    let lignes = req.query_map([chemin], ligne_section)?;
+    construire(lignes.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Les extraits qui tiennent dans `limite` caractères, les plus proches de la question d'abord (mots en
+/// commun, titre compté triple). Les identifiants et l'ordre d'origine sont gardés : une même source
+/// garde le même numéro d'une question à l'autre, et l'IA peut s'y référer dans la suite de la conversation.
+pub fn pour_la_question(extraits: &[Extrait], question: &str, limite: usize) -> Vec<Extrait> {
+    if extraits.iter().map(|e| e.texte.len()).sum::<usize>() <= limite {
+        return extraits.to_vec();
+    }
+    let cles = mots(question);
+    let score = |e: &Extrait| {
+        let titre = mots(&format!("{} {}", e.titre_note, e.section));
+        let texte = mots(&e.texte);
+        cles.iter().map(|c| 3 * titre.contains(c) as usize + texte.contains(c) as usize).sum::<usize>()
+    };
+    let mut rangs: Vec<usize> = (0..extraits.len()).collect();
+    rangs.sort_by_key(|&i| std::cmp::Reverse(score(&extraits[i])));
+    let mut gardes = Vec::new();
+    let mut taille = 0;
+    for i in rangs {
+        if taille + extraits[i].texte.len() <= limite {
+            taille += extraits[i].texte.len();
+            gardes.push(i);
+        }
+    }
+    gardes.sort_unstable();
+    gardes.into_iter().map(|i| extraits[i].clone()).collect()
+}
+
 type LigneSection = (String, String, String, String, String);
 
 fn ligne_section(r: &rusqlite::Row) -> rusqlite::Result<LigneSection> {

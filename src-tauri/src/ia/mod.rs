@@ -264,6 +264,54 @@ impl ServiceIa {
         resultat
     }
 
+    /// Conversation : réponse en texte libre (Markdown) lue au fil de l'eau, par Gemini ou l'IA locale selon
+    /// le réglage (même logique que `appeler_json_simple` : secours local si Gemini est indisponible).
+    /// `flux` reçoit le texte reçu jusqu'ici (il repart de zéro si Gemini doit être redemandé).
+    /// Renvoie aussi le modèle qui a vraiment répondu (« local:… » pour l'IA locale).
+    pub async fn appeler_texte_flux(
+        &self,
+        db: &Mutex<Connection>,
+        usage: &str,
+        limites: Limites,
+        local: Option<&ConfigLocale>,
+        requete: &Requete,
+        flux: &(dyn Fn(&str) + Sync),
+    ) -> Result<(Reponse, String), ErreurIa> {
+        if let Some(l) = local.filter(|l| l.mode == ModeLocal::Toujours) {
+            return self.local_flux(db, usage, l, requete, flux).await;
+        }
+        let gemini = self
+            .executer(db, usage, &requete.modele, limites, |cle| async move { self.client.generer_flux(&cle, requete, flux).await }, |r| {
+                (r.jetons_entree, r.jetons_sortie)
+            })
+            .await;
+        match gemini {
+            Ok(r) => Ok((r, requete.modele.clone())),
+            Err(e) if e.justifie_le_secours() => match local {
+                Some(l) => self.local_flux(db, usage, l, requete, flux).await.map_err(|locale| ErreurIa::Secours { gemini: Box::new(e), locale: Box::new(locale) }),
+                None => Err(e),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Réponse de l'IA locale au fil de l'eau, notée dans le journal (préfixe « local: »).
+    async fn local_flux(
+        &self,
+        db: &Mutex<Connection>,
+        usage: &str,
+        l: &ConfigLocale,
+        requete: &Requete,
+        flux: &(dyn Fn(&str) + Sync),
+    ) -> Result<(Reponse, String), ErreurIa> {
+        let debut = Instant::now();
+        let resultat = self.local.generer_flux(&l.adresse, &l.modele, requete, flux).await;
+        let bilan = resultat.as_ref().map(|r| (r.jetons_entree, r.jetons_sortie));
+        let modele = format!("{PREFIXE_LOCAL}{}", l.modele);
+        let _ = journaliser(&db.lock().unwrap(), usage, &modele, bilan, debut.elapsed().as_millis() as i64);
+        resultat.map(|r| (r, modele))
+    }
+
     /// Appel JSON à l'IA locale (mêmes vérifications et réessais qu'avec Gemini).
     pub async fn appeler_json_local<T: DeserializeOwned>(
         &self,

@@ -33,6 +33,7 @@
     "markmap-common": "0.18.9",
     "markmap-view": "0.18.12",
     "mediabunny": "1.61.3",
+    "mermaid": "11.17.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "rehype-katex": "^7.0.1",

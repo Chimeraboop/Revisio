@@ -923,7 +923,85 @@ export const api = {
   corrigerRedactions: (copieId: number, tache?: string) => invoke<Copie>("corriger_redactions", { copieId, tache }),
   retirerQuestion: (copieId: number, numero: number, retiree: boolean) =>
     invoke<Copie>("retirer_question", { copieId, numero, retiree }),
+  // Discussion avec l'IA
+  conversations: () => invoke<Conversation[]>("liste_conversations"),
+  creerConversation: (sources: SourceConversation[]) => invoke<Conversation>("creer_conversation", { sources }),
+  ouvrirConversation: (id: number) => invoke<ConversationComplete>("ouvrir_conversation", { id }),
+  renommerConversation: (id: number, titre: string) => invoke<void>("renommer_conversation", { id, titre }),
+  supprimerConversation: (id: number) => invoke<void>("supprimer_conversation", { id }),
+  definirSourcesConversation: (id: number, sources: SourceConversation[]) =>
+    invoke<void>("definir_sources_conversation", { id, sources }),
+  envoyerMessage: (conversationId: number, texte: string, tache?: string) =>
+    invoke<ReponseIa>("envoyer_message", { conversationId, texte, tache }),
+  relancerReponse: (conversationId: number, tache?: string) => invoke<ReponseIa>("relancer_reponse", { conversationId, tache }),
+  deciderCreation: (id: number, accepter: boolean) => invoke<CreationIa>("decider_creation", { id, accepter }),
+  creationsIa: () => invoke<CreationIa[]>("creations_ia"),
+  renommerCreation: (id: number, titre: string) => invoke<void>("renommer_creation", { id, titre }),
+  retirerCreation: (id: number) => invoke<void>("retirer_creation", { id }),
+  pointsFonction: (expression: string, xmin: number, xmax: number) =>
+    invoke<[number, number][]>("points_fonction", { expression, xmin, xmax }),
 };
+
+// ---------- Discussion avec l'IA ----------
+
+/** Source d'une conversation : une note (`note` = chemin) ou un chapitre (`chapitre` nul : notes générales). */
+export interface SourceConversation {
+  matiere?: string | null;
+  chapitre?: string | null;
+  note?: string | null;
+}
+
+export interface Conversation {
+  id: number;
+  titre: string;
+  creee: number;
+  maj: number;
+  sources: SourceConversation[];
+  messages: number;
+  /** Début de la dernière question. */
+  apercu: string;
+}
+
+export interface ExtraitCite {
+  id: string;
+  chemin: string;
+  titre: string;
+  section: string;
+}
+
+export interface MessageConversation {
+  id: number;
+  ia: boolean;
+  texte: string;
+  date: number;
+  modele: string | null;
+  extraits: ExtraitCite[];
+}
+
+export interface CreationIa {
+  id: number;
+  date: number;
+  genre: "diagramme" | "graphique";
+  titre: string;
+  contenu: string;
+  conversationId: number | null;
+  conversationTitre: string | null;
+  messageId: number | null;
+  /** Rang du bloc dans le message. */
+  indice: number;
+  statut: "proposee" | "acceptee" | "refusee";
+}
+
+export interface ConversationComplete {
+  conversation: Conversation;
+  messages: MessageConversation[];
+  creations: CreationIa[];
+}
+
+export interface ReponseIa {
+  message: MessageConversation;
+  creations: CreationIa[];
+}
 
 /** Les erreurs Rust arrivent sous forme de texte ; on garantit un message lisible. */
 export function messageErreur(e: unknown): string {

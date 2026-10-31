@@ -330,6 +330,38 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE historique_vault ADD COLUMN groupe TEXT;           -- opérations annulées ensemble
     CREATE INDEX historique_vault_groupe ON historique_vault(groupe);
     "#,
+    // 14 — discussion avec l'IA : conversations (sources choisies), messages, créations proposées / acceptées
+    r#"
+    CREATE TABLE conversations (
+        id      INTEGER PRIMARY KEY,
+        titre   TEXT NOT NULL,
+        creee   INTEGER NOT NULL,
+        maj     INTEGER NOT NULL,
+        sources TEXT NOT NULL DEFAULT '[]'          -- JSON [{matiere, chapitre, note}]
+    );
+    CREATE TABLE messages_conversation (
+        id              INTEGER PRIMARY KEY,
+        conversation_id INTEGER NOT NULL,
+        ia              INTEGER NOT NULL,            -- 1 : réponse de l'IA, 0 : question de l'élève
+        texte           TEXT NOT NULL,
+        date            INTEGER NOT NULL,
+        modele          TEXT,
+        extraits        TEXT NOT NULL DEFAULT '[]'   -- JSON des extraits cités [{id, chemin, titre, section}]
+    );
+    CREATE INDEX messages_conversation_conv ON messages_conversation(conversation_id, id);
+    CREATE TABLE creations_ia (
+        id              INTEGER PRIMARY KEY,
+        date            INTEGER NOT NULL,
+        genre           TEXT NOT NULL,               -- diagramme (Mermaid) | graphique (JSON)
+        titre           TEXT NOT NULL,
+        contenu         TEXT NOT NULL,
+        conversation_id INTEGER,
+        message_id      INTEGER,
+        indice          INTEGER NOT NULL DEFAULT 0,
+        statut          TEXT NOT NULL DEFAULT 'proposee'  -- proposee | acceptee | refusee
+    );
+    CREATE INDEX creations_ia_conv ON creations_ia(conversation_id, message_id);
+    "#,
 ];
 
 pub fn lire_meta(conn: &Connection, cle: &str) -> Option<String> {

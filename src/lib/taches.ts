@@ -8,7 +8,7 @@ import { messageErreur } from "./api";
 import { signalerErreurReseau } from "./connexion";
 
 /** Écrans qui lancent des générations (mêmes noms que les vues d'App). */
-export type EcranTache = "atelier" | "exercices" | "cartes" | "podcasts" | "videos" | "reviser" | "photos";
+export type EcranTache = "atelier" | "discussion" | "exercices" | "cartes" | "podcasts" | "videos" | "reviser" | "photos";
 
 export type StatutTache = "en-cours" | "finie" | "erreur" | "interrompue";
 

@@ -130,7 +130,8 @@ impl Reglages {
 pub fn charger(dossier: &Path) -> Reglages {
     let mut r: Reglages = std::fs::read_to_string(dossier.join(NOM_FICHIER))
         .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
+        // Un fichier retouché avec le Bloc-notes ou PowerShell peut commencer par une marque d'encodage (BOM).
+        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok())
         .unwrap_or_default();
     // Mise à jour d'une version sans guide de démarrage : un élève qui avait déjà choisi
     // son vault ne revoit pas le guide.
