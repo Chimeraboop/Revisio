@@ -89,7 +89,7 @@ export interface EntreeHistorique {
   date: number;
   chemin: string;
   genre: "creation" | "modification" | "dossier" | "deplacement" | "suppression" | "suppression_dossier";
-  origine: "manuel" | "photos";
+  origine: "manuel" | "photos" | "discussion";
   lotId: number | null;
   raison: string | null;
   annuleeLe: number | null;
@@ -938,6 +938,7 @@ export const api = {
   creationsIa: () => invoke<CreationIa[]>("creations_ia"),
   renommerCreation: (id: number, titre: string) => invoke<void>("renommer_creation", { id, titre }),
   retirerCreation: (id: number) => invoke<void>("retirer_creation", { id }),
+  ajouterCreationANote: (id: number, chemin: string) => invoke<void>("ajouter_creation_a_note", { id, chemin }),
   pointsFonction: (expression: string, xmin: number, xmax: number) =>
     invoke<[number, number][]>("points_fonction", { expression, xmin, xmax }),
 };

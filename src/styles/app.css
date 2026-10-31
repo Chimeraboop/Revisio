@@ -5158,7 +5158,8 @@ summary.callout-titre {
   }
 }
 
-.graphique-sujet .point-cache {
+/* Points d'une fonction : seulement repérables au survol (plus fort que la couleur de la série). */
+.graphique-sujet g .point.point-cache {
   fill: transparent;
 }
 
@@ -5176,4 +5177,12 @@ summary.callout-titre {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.liste-choix-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
 }

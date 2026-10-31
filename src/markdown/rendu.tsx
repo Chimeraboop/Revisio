@@ -1,6 +1,6 @@
 // Chaîne de rendu Markdown → éléments React.
 // Analogie Python : une suite de fonctions appliquées l'une après l'autre au même arbre.
-import { createContext, useContext, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { createContext, isValidElement, useContext, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { unified } from "unified";
@@ -20,6 +20,8 @@ import { pretraiter, remarkCallouts, remarkMathBloc, remarkObsidian } from "./ob
 import Dessin from "../excalidraw/Dessin";
 import { extraireScene, type Scene } from "../excalidraw/scene";
 import { api } from "../lib/api";
+import Diagramme from "../discussion/Diagramme";
+import GraphiqueIa from "../discussion/GraphiqueIa";
 
 // Le schéma par défaut limite les classes CSS permises sur certaines balises (a, li…) :
 // on retire ces restrictions pour que « className » soit permis partout (ce n'est pas dangereux).
@@ -99,7 +101,25 @@ export function MarkdownObsidian({ markdown, navigation }: { markdown: string; n
   );
 }
 
-const COMPOSANTS = { a: Lien, span: Span, img: ImageMarkdown };
+const COMPOSANTS = { a: Lien, span: Span, img: ImageMarkdown, pre: BlocCode };
+
+/** Texte brut d'un nœud React (contenu d'un bloc de code). */
+function texteDe(n: ReactNode): string {
+  if (typeof n === "string" || typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(texteDe).join("");
+  if (isValidElement<{ children?: ReactNode }>(n)) return texteDe(n.props.children);
+  return "";
+}
+
+/** Blocs de code : ```mermaid (schéma, comme dans Obsidian) et ```graphique (graphique de Révisio)
+ *  sont dessinés ; les autres restent du code. */
+function BlocCode(props: ComponentProps<"pre">) {
+  const code = props.children;
+  const classe = isValidElement<{ className?: string }>(code) ? (code.props.className ?? "") : "";
+  if (/\blanguage-mermaid\b/.test(classe)) return <Diagramme code={texteDe(code).trim()} />;
+  if (/\blanguage-graphique\b/.test(classe)) return <GraphiqueIa contenu={texteDe(code).trim()} />;
+  return <pre {...props} />;
+}
 
 function Lien(props: ComponentProps<"a">) {
   const nav = useContext(Contexte);

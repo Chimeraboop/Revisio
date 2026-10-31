@@ -1,7 +1,7 @@
 // Atelier IA : génération par Gemini (en ligne) ou, pour les tâches simples, par l'IA locale (Ollama).
 // Le contenu généré est enregistré et reste utilisable hors ligne (les questions deviennent des cartes).
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, KeyRound, Layers, ListChecks, Network, Sparkles } from "lucide-react";
+import { FolderOpen, KeyRound, Layers, ListChecks, Network, Shapes, Sparkles } from "lucide-react";
 import EntetePage from "../composants/EntetePage";
 import Message from "../composants/Message";
 import { api, ChapitreChoisi, ChapitreIa, EstimationIa, messageErreur, ResultatGeneration } from "../lib/api";
@@ -19,12 +19,22 @@ interface Props {
   onReviserQuestions: (c: ChapitreChoisi) => void;
   /** Ouvre l'écran Cartes mentales sur ce chapitre. */
   onOuvrirCartes: (c: ChapitreChoisi) => void;
+  /** Ouvre l'onglet Créations de l'écran « Discuter avec l'IA ». */
+  onOuvrirVisuels: () => void;
 }
 
 const cle = (c: ChapitreIa) => `${c.matiere}|${c.chapitre ?? ""}`;
 const nomChapitre = (c: ChapitreIa) => c.chapitre ?? "Notes générales de la matière";
 
-export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirCartes }: Props) {
+export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirCartes, onOuvrirVisuels }: Props) {
+  /** Schémas et graphiques gardés dans les discussions avec l'IA. */
+  const [visuels, setVisuels] = useState(0);
+  useEffect(() => {
+    api
+      .creationsIa()
+      .then((l) => setVisuels(l.length))
+      .catch(() => {});
+  }, []);
   const moteur = useMoteurIa();
   const modeLocal = useModeLocal();
   const { enLigne, etat } = moteur;
@@ -117,7 +127,7 @@ export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirC
         </Message>
       )}
 
-      {creations.length > 0 && (
+      {(creations.length > 0 || visuels > 0) && (
         <section className="carte bloc apparait" style={{ "--i": 1 } as React.CSSProperties}>
           <h2 className="titre-bloc">
             <FolderOpen size={18} className="icone" aria-hidden /> Tes créations
@@ -127,6 +137,19 @@ export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirC
             séance du jour « Autres matières » (écran Réviser), comme les autres cartes. Pour les travailler tout de suite,
             clique sur « Réviser ». Les <strong>cartes mentales</strong> se trouvent dans l'écran Cartes mentales.
           </p>
+          {visuels > 0 && (
+            <p className="rangee petit">
+              <Shapes size={15} className="icone" aria-hidden />
+              <span>
+                {visuels} schéma{visuels > 1 ? "s" : ""} ou graphique{visuels > 1 ? "s" : ""} gardé{visuels > 1 ? "s" : ""} dans
+                tes discussions avec l'IA
+              </span>
+              <button className="bouton bouton-petit" onClick={onOuvrirVisuels}>
+                Voir
+              </button>
+            </p>
+          )}
+          {creations.length > 0 && (
           <table className="tableau-donnees tableau-creations">
             <thead>
               <tr>
@@ -174,6 +197,7 @@ export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirC
               ))}
             </tbody>
           </table>
+          )}
         </section>
       )}
 

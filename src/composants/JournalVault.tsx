@@ -81,7 +81,7 @@ export default function JournalVault({ lot, version, limite = 30, onOuvrir }: Pr
                 <span className="texte-doux petit">
                   {ACTIONS[e.genre] ?? "Modifiée"}
                   {e.cheminNouveau ? ` vers ${e.cheminNouveau}` : ""}
-                  {e.origine === "photos" ? " à partir de photos" : " à la main"} le {DATE.format(e.date)}
+                  {e.origine === "photos" ? " à partir de photos" : e.origine === "discussion" ? " depuis une discussion avec l'IA" : " à la main"} le {DATE.format(e.date)}
                   {e.raison ? ` : ${e.raison}` : ""}
                   {e.annuleeLe ? ", annulée" : ""}
                 </span>

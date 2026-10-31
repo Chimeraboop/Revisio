@@ -1,8 +1,10 @@
 // Onglet « Créations » : les schémas et graphiques gardés, des plus récents aux plus anciens, avec un lien
 // vers la conversation d'origine.
 import { useEffect, useState } from "react";
-import { ChartLine, MessagesSquare, Network, Pencil, Trash } from "lucide-react";
-import { api, messageErreur, type CreationIa } from "../lib/api";
+import { ChartLine, FilePlus, MessagesSquare, Network, Pencil, Search, Trash } from "lucide-react";
+import Fenetre from "../composants/Fenetre";
+import Message from "../composants/Message";
+import { api, messageErreur, type CreationIa, type NoteResume } from "../lib/api";
 import { Visuel } from "./Messages";
 
 const formatDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -10,9 +12,54 @@ const formatDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "lo
 interface Props {
   ouvrirConversation: (id: number) => void;
   ouvrirNote: (chemin: string) => void;
+  /** L'élève a autorisé Révisio à écrire dans ses notes (Réglages). */
+  ecritureAutorisee: boolean;
 }
 
-export default function Creations({ ouvrirConversation }: Props) {
+/** Fenêtre de choix d'une note (recherche par titre). */
+function ChoixNote({ onChoisir, onFermer }: { onChoisir: (n: NoteResume) => void; onFermer: () => void }) {
+  const [notes, setNotes] = useState<NoteResume[]>([]);
+  const [filtre, setFiltre] = useState("");
+  useEffect(() => {
+    api
+      .arbre()
+      .then((a) => {
+        const toutes = [
+          ...a.matieres.flatMap((m) => [...m.notes, ...m.chapitres.flatMap((c) => c.notes)]),
+          ...a.autres.flatMap((g) => g.notes),
+        ];
+        setNotes(toutes.filter((n) => n.genre !== "schema"));
+      })
+      .catch(() => setNotes([]));
+  }, []);
+  const r = filtre.trim().toLowerCase();
+  const visibles = notes.filter((n) => !r || n.titre.toLowerCase().includes(r) || n.chemin.toLowerCase().includes(r)).slice(0, 60);
+  return (
+    <Fenetre titre="Ajouter à quelle note ?" onFermer={onFermer}>
+      <p className="texte-doux petit">
+        Le visuel est ajouté à la fin de la note, avec son titre. Tu peux l'annuler dans le journal des écritures.
+      </p>
+      <label className="champ-recherche">
+        <Search size={15} className="icone" aria-hidden />
+        <input className="champ" placeholder="Chercher une note…" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+      </label>
+      <ul className="liste-choix-notes">
+        {visibles.map((n) => (
+          <li key={n.chemin}>
+            <button className="conversation-item" onClick={() => onChoisir(n)}>
+              <span className="conversation-titre">{n.titre}</span>
+              <span className="texte-doux petit conversation-infos">{n.chemin.replace(/\/[^/]*$/, "") || "Racine"}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Fenetre>
+  );
+}
+
+export default function Creations({ ouvrirConversation, ouvrirNote, ecritureAutorisee }: Props) {
+  const [ajout, setAjout] = useState<CreationIa | null>(null);
+  const [ajoutee, setAjoutee] = useState<{ titre: string; chemin: string } | null>(null);
   const [creations, setCreations] = useState<CreationIa[] | null>(null);
   const [filtre, setFiltre] = useState<"tout" | "diagramme" | "graphique">("tout");
   const [renommage, setRenommage] = useState<{ id: number; titre: string } | null>(null);
@@ -49,6 +96,17 @@ export default function Creations({ ouvrirConversation }: Props) {
     }
   }
 
+  async function ajouter(c: CreationIa, n: NoteResume) {
+    setAjout(null);
+    setErreur(null);
+    try {
+      await api.ajouterCreationANote(c.id, n.chemin);
+      setAjoutee({ titre: n.titre, chemin: n.chemin });
+    } catch (e) {
+      setErreur(messageErreur(e));
+    }
+  }
+
   const visibles = (creations ?? []).filter((c) => filtre === "tout" || c.genre === filtre);
 
   return (
@@ -72,6 +130,14 @@ export default function Creations({ ouvrirConversation }: Props) {
         </span>
       </div>
       {erreur && <p className="message-erreur">{erreur}</p>}
+      {ajoutee && (
+        <Message genre="succes">
+          Ajouté à la fin de « {ajoutee.titre} ».{" "}
+          <button className="lien-discret" onClick={() => ouvrirNote(ajoutee.chemin)}>
+            Ouvrir la note
+          </button>
+        </Message>
+      )}
       {creations && creations.length === 0 && (
         <div className="carte etat-vide">
           <Network size={30} strokeWidth={1.6} aria-hidden />
@@ -125,6 +191,14 @@ export default function Creations({ ouvrirConversation }: Props) {
                   </button>
                 )}
                 <span className="espace" />
+                <button
+                  className="lien-discret"
+                  disabled={!ecritureAutorisee}
+                  title={ecritureAutorisee ? undefined : "Autorise d'abord Révisio à écrire dans tes notes (Réglages)."}
+                  onClick={() => setAjout(c)}
+                >
+                  <FilePlus size={13} aria-hidden /> Ajouter à une note
+                </button>
                 {aRetirer === c.id ? (
                   <>
                     <button className="bouton bouton-danger bouton-petit" onClick={() => retirer(c.id)}>
@@ -144,6 +218,7 @@ export default function Creations({ ouvrirConversation }: Props) {
           );
         })}
       </div>
+      {ajout && <ChoixNote onChoisir={(n) => ajouter(ajout, n)} onFermer={() => setAjout(null)} />}
     </section>
   );
 }

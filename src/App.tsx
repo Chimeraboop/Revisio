@@ -128,7 +128,9 @@ export default function App() {
   const [demandeSeance, setDemandeSeance] = useState<DemandeSeance | null>(null);
   const [demandeExamen, setDemandeExamen] = useState<{ chapitres: ChapitreChoisi[] } | null>(null);
   const [demandeCarte, setDemandeCarte] = useState<ChapitreChoisi | null>(null);
-  const [demandeConversation] = useState<{ conversationId: number } | null>(null);
+  const [demandeConversation, setDemandeConversation] = useState<{ conversationId?: number; onglet?: "creations" } | null>(
+    null,
+  );
   const demander = (d: DemandeSeance) => {
     setDemandeSeance(d);
     setVue("reviser");
@@ -327,6 +329,10 @@ export default function App() {
               setDemandeCarte({ ...c });
               setVue("cartes");
             }}
+            onOuvrirVisuels={() => {
+              setDemandeConversation({ onglet: "creations" });
+              setVue("discussion");
+            }}
           />
         ) : vue === "planning" ? (
           <PlanningVue
@@ -360,6 +366,7 @@ export default function App() {
           <DiscussionVue
             ouvrirNote={(chemin) => ouvrirNote(chemin)}
             onReglages={() => setVue("reglages")}
+            ecritureAutorisee={reglages.ecritureAutorisee}
             demande={demandeConversation}
           />
         ) : vue === "photos" ? (

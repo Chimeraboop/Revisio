@@ -258,6 +258,7 @@ pub fn run() {
             discussion::renommer_creation,
             discussion::retirer_creation,
             discussion::points_fonction,
+            discussion::ajouter_creation_a_note,
             commandes::definir_matieres_exclues,
             commandes::enregistrer_revision,
             commandes::suspendre_carte,

@@ -29,8 +29,9 @@ import { Question, ReponseIa } from "./Messages";
 interface Props {
   ouvrirNote: (chemin: string) => void;
   onReglages: () => void;
-  /** Conversation à ouvrir en arrivant (lien depuis une création). */
-  demande?: { conversationId: number } | null;
+  ecritureAutorisee: boolean;
+  /** En arrivant : ouvrir une conversation, ou l'onglet Créations (lien depuis l'Atelier IA). */
+  demande?: { conversationId?: number; onglet?: "creations" } | null;
 }
 
 const formatDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
@@ -44,7 +45,7 @@ function quand(ms: number): string {
 // La dernière conversation ouverte est retrouvée en revenant sur l'écran.
 let derniereOuverte: number | null = null;
 
-export default function DiscussionVue({ ouvrirNote, onReglages, demande }: Props) {
+export default function DiscussionVue({ ouvrirNote, onReglages, ecritureAutorisee, demande }: Props) {
   const moteur = useMoteurIa();
   const [onglet, setOnglet] = useState<"conversations" | "creations">("conversations");
   const [liste, setListe] = useState<Conversation[]>([]);
@@ -87,7 +88,8 @@ export default function DiscussionVue({ ouvrirNote, onReglages, demande }: Props
   useEffect(() => {
     charger();
     const cible = demande?.conversationId ?? derniereOuverte;
-    if (cible !== null) ouvrir(cible);
+    if (cible !== null) ouvrir(cible).then(() => demande?.onglet && setOnglet(demande.onglet));
+    else if (demande?.onglet) setOnglet(demande.onglet);
   }, [demande]);
 
   // Réponse terminée (ici ou pendant qu'on était ailleurs) : on relit la conversation.
@@ -262,6 +264,7 @@ export default function DiscussionVue({ ouvrirNote, onReglages, demande }: Props
           <Creations
             ouvrirConversation={(conversationId) => ouvrir(conversationId)}
             ouvrirNote={ouvrirNote}
+            ecritureAutorisee={ecritureAutorisee}
           />
         ) : !ouverte ? (
           <div className="carte etat-vide">

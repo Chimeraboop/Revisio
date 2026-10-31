@@ -547,6 +547,43 @@ pub fn retirer_creation(etat: State<Etat>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// Ce qui est ajouté à la fin d'une note pour une création : un titre et le bloc de code. Obsidian dessine
+/// les schémas Mermaid ; les graphiques sont dessinés par Révisio (dans Obsidian, on voit leurs données).
+pub fn bloc_pour_note(c: &Creation) -> String {
+    let langage = if c.genre == "diagramme" { "mermaid" } else { "graphique" };
+    format!("## {}\n\n```{langage}\n{}\n```\n", c.titre.trim(), c.contenu.trim())
+}
+
+/// Ajoute une création gardée à la fin d'une note (écriture autorisée seulement ; annulable dans le journal).
+#[tauri::command]
+pub fn ajouter_creation_a_note(etat: State<Etat>, id: i64, chemin: String) -> Result<(), String> {
+    let reglages = etat.reglages.lock().unwrap().clone();
+    let racine = reglages.vault().ok_or("Aucun dossier de notes choisi.")?;
+    let conn = etat.db.lock().unwrap();
+    let c = creation(&conn, id).map_err(|e| e.to_string())?.ok_or("Création introuvable.")?;
+    if c.statut != "acceptee" {
+        return Err("Garde d'abord ce visuel avant de l'ajouter à une note.".into());
+    }
+    // Octets exacts lus maintenant : l'écriture est refusée si la note change entre-temps.
+    let lu = crate::vault::lire_octets(&racine, &chemin)?;
+    let actuel = crate::vault::lire_texte(&racine, &chemin)?;
+    let fin = if actuel.contains("\r\n") { "\r\n" } else { "\n" };
+    let ajout = bloc_pour_note(&c).replace('\n', fin);
+    let nouveau = format!("{}{fin}{fin}{ajout}", actuel.trim_end());
+    let raison = format!("Ajout de « {} » (discussion avec l'IA)", c.titre);
+    let ctx = crate::ecriture::Contexte {
+        racine: &racine,
+        autorisee: reglages.ecriture_autorisee,
+        origine: "discussion",
+        lot_id: None,
+        raison: Some(&raison),
+        maintenant: maintenant_ms(),
+        groupe: None,
+    };
+    crate::ecriture::modifier(&conn, &ctx, &chemin, &nouveau, &|octets: &[u8]| octets == lu.as_slice())?;
+    Ok(())
+}
+
 /// Points d'une fonction pour un graphique (calculés par Révisio, pas par l'IA). Les points où la
 /// fonction n'est pas définie sont sautés.
 #[tauri::command]
@@ -650,6 +687,23 @@ mod tests {
         assert_eq!((restantes.len(), restantes[0].conversation_id), (1, None));
         let total: i64 = conn.query_row("SELECT count(*) FROM creations_ia", [], |r| r.get(0)).unwrap();
         assert_eq!(total, 1);
+    }
+
+    #[test]
+    fn bloc_ajoute_a_une_note() {
+        let c = Creation {
+            id: 1,
+            date: 0,
+            genre: "diagramme".into(),
+            titre: " Étapes ".into(),
+            contenu: "flowchart TD\nA-->B\n".into(),
+            conversation_id: None,
+            conversation_titre: None,
+            message_id: None,
+            indice: 0,
+            statut: "acceptee".into(),
+        };
+        assert_eq!(bloc_pour_note(&c), "## Étapes\n\n```mermaid\nflowchart TD\nA-->B\n```\n");
     }
 
     #[test]
