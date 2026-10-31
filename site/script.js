@@ -191,3 +191,20 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 window.addEventListener("resize", auDefilement);
 auDefilement();
+
+/* ---------- Vidéo de présentation : un seul bouton Lire, puis les commandes du navigateur ---------- */
+for (const lecteur of document.querySelectorAll(".lecteur-video")) {
+  const video = lecteur.querySelector("video");
+  const bouton = lecteur.querySelector(".lancer-video");
+  video.controls = false;
+  bouton.addEventListener("click", () => {
+    video.controls = true;
+    video.play();
+  });
+  video.addEventListener("play", () => lecteur.classList.add("en-lecture"));
+  video.addEventListener("ended", () => {
+    lecteur.classList.remove("en-lecture");
+    video.controls = false;
+    video.load();
+  });
+}

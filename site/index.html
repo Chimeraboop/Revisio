@@ -27,6 +27,7 @@
       <span>Révisio</span>
     </a>
     <nav class="liens" aria-label="Sections">
+      <a href="#video">Vidéo</a>
       <a href="#fonctionnement">Fonctionnement</a>
       <a href="#photos">Photos</a>
       <a href="#planning">Planning</a>
@@ -109,6 +110,32 @@
           <span><strong>Répétition espacée FSRS</strong> chaque carte revient au bon moment</span>
         </li>
       </ul>
+    </section>
+
+    <!-- Vidéo de présentation : 16:9 sur grand écran, 9:16 (version courte) sur téléphone -->
+    <section class="video" id="video">
+      <div class="video-tete">
+        <h2 class="titre-section">Révisio, en vidéo.</h2>
+        <p class="chapeau">De la note de cours à la séance du jour, puis le planning et l'IA. Les notes de la vidéo sont des exemples.</p>
+      </div>
+      <div class="lecteur-video lecteur-paysage">
+        <video controls preload="none" playsinline poster="images/affiche-video-16x9.jpg" aria-label="Vidéo de présentation de Révisio">
+          <source src="videos/revisio-16x9.mp4" type="video/mp4">
+        </video>
+        <button class="lancer-video" type="button">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><polygon points="7 4 20 12 7 20 7 4"/></svg>
+          <span>Lire la vidéo <small>1:20</small></span>
+        </button>
+      </div>
+      <div class="lecteur-video lecteur-portrait">
+        <video controls preload="none" playsinline poster="images/affiche-video-9x16.jpg" aria-label="Vidéo de présentation de Révisio, version courte">
+          <source src="videos/revisio-9x16.mp4" type="video/mp4">
+        </video>
+        <button class="lancer-video" type="button">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><polygon points="7 4 20 12 7 20 7 4"/></svg>
+          <span>Lire la vidéo <small>0:30</small></span>
+        </button>
+      </div>
     </section>
 
     <!-- Fonctionnement : fenêtre épinglée -->
