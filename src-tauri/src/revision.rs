@@ -50,9 +50,12 @@ pub struct FiltreSeance {
     #[serde(skip)]
     pub exclues: Vec<String>,
     /// Sens des cartes de vocabulaire laissé de côté (« vers_fr » ou « depuis_fr ») : posé par Révisio d'après
-    /// le réglage du recto, pour toutes les séances.
+    /// le recto choisi (celui de la séance ciblée, sinon le réglage).
     #[serde(skip)]
     pub sens_exclu: Option<String>,
+    /// Recto choisi pour cette séance (séance ciblée) ; absent : celui des réglages.
+    #[serde(default)]
+    pub recto: Option<String>,
 }
 
 /// Un chapitre d'une matière (`matiere` absente : notes sans matière ; `chapitre` absent : notes générales).
@@ -538,6 +541,8 @@ pub struct ComptesChapitre {
     pub dues: i64,
     pub nouvelles: i64,
     pub total: i64,
+    /// Cartes de vocabulaire (la séance ciblée propose alors de choisir le recto).
+    pub vocabulaire: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -581,7 +586,8 @@ pub fn resume(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut req = conn.prepare(
-        "SELECT matiere, chapitre, sum(echeance IS NOT NULL AND echeance <= ?1), sum(etat_fsrs IS NULL), count(*)
+        "SELECT matiere, chapitre, sum(echeance IS NOT NULL AND echeance <= ?1), sum(etat_fsrs IS NULL), count(*),
+                sum(genre = 'vocabulaire')
          FROM cartes WHERE active = 1 AND suspendue = 0 GROUP BY matiere, chapitre
          ORDER BY matiere IS NULL, matiere, chapitre IS NOT NULL, chapitre",
     )?;
@@ -593,6 +599,7 @@ pub fn resume(
                 dues: r.get(2)?,
                 nouvelles: r.get(3)?,
                 total: r.get(4)?,
+                vocabulaire: r.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

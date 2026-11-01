@@ -3594,6 +3594,15 @@ summary.callout-titre {
   gap: 6px;
 }
 
+/* Plein écran : l'espace web passe par-dessus le menu et la barre du haut. */
+.espace-web.plein-ecran {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: 6px 8px 0;
+  background: var(--fond);
+}
+
 .barre-onglets {
   display: flex;
   gap: 4px;

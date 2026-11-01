@@ -100,6 +100,8 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
   const [choisis, setChoisis] = useState<Set<string>>(new Set());
   /** Séance ciblée sur des chapitres : toutes leurs cartes (même pas encore à revoir), ou seulement les dues. */
   const [toutRevoir, setToutRevoir] = useState(true);
+  /** Recto du vocabulaire pour la séance ciblée seulement (au départ : celui des séances du jour). */
+  const [rectoCible, setRectoCible] = useState<SensVocabulaire>(reglages.sensVocabulaire);
   const [genres, setGenres] = useState<GenreCarte[]>([]);
   const [cartes, setCartes] = useState<CarteSeance[] | null>(null);
   const [bilan, setBilan] = useState<Bilan | null>(null);
@@ -147,6 +149,7 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
         chapitres,
         // Séance ciblée « tout revoir » : toutes les cartes des chapitres cochés passent, même pas encore dues.
         planifies: groupe ? planifies : toutRevoir ? chapitres : [],
+        recto: groupe || !vocabulaireCible ? undefined : rectoCible,
       }),
       groupe ? dureeDuGroupe(reglages, groupe) : null,
     );
@@ -208,6 +211,10 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
     .filter((c) => choisis.has(cleChapitreSeance(c)))
     .map(({ matiere, chapitre }) => ({ matiere, chapitre }));
   const cartesChoisies = (resume?.chapitres ?? []).filter((c) => choisis.has(cleChapitreSeance(c)));
+  // La séance ciblée peut contenir du vocabulaire : on propose alors de choisir le recto.
+  const vocabulaireCible =
+    (genres.length === 0 || genres.includes("vocabulaire")) &&
+    (choisis.size > 0 ? cartesChoisies : resume?.chapitres ?? []).some((c) => c.vocabulaire > 0);
   const exclues = reglages.matieresExclues;
 
   return (
@@ -247,24 +254,7 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
               ) : (
                 <p className="texte-doux">Chargement…</p>
               )}
-              {g === "langues" && (
-                <div className="rangee choix-recto">
-                  <span className="petit texte-doux">Au recto :</span>
-                  <div className="segmente" role="radiogroup" aria-label="Côté montré au recto des cartes de vocabulaire">
-                    {RECTOS.map(([sens, libelle]) => (
-                      <button
-                        key={sens}
-                        role="radio"
-                        aria-checked={reglages.sensVocabulaire === sens}
-                        className={"segment" + (reglages.sensVocabulaire === sens ? " actif" : "")}
-                        onClick={() => choisirRecto(sens)}
-                      >
-                        {libelle}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {g === "langues" && <ChoixRecto sens={reglages.sensVocabulaire} onChange={choisirRecto} />}
               {planDuGroupe.length > 0 && (
                 <p className="petit">
                   Planning du jour :{" "}
@@ -339,6 +329,13 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
             </button>
           </div>
         )}
+        {vocabulaireCible && (
+          <ChoixRecto
+            sens={rectoCible}
+            onChange={setRectoCible}
+            aide="pour cette séance seulement"
+          />
+        )}
         <div className="rangee bloc-haut">
           {genresDisponibles.map((g) => (
             <label key={g} className="case">
@@ -403,6 +400,29 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
 }
 
 /** Intitulé court d'une carte pour une liste (sans la syntaxe Markdown du trou). */
+/** Côté montré au recto des cartes de vocabulaire. */
+function ChoixRecto({ sens, onChange, aide }: { sens: SensVocabulaire; onChange: (s: SensVocabulaire) => void; aide?: string }) {
+  return (
+    <div className="rangee choix-recto">
+      <span className="petit texte-doux">Au recto :</span>
+      <div className="segmente" role="radiogroup" aria-label="Côté montré au recto des cartes de vocabulaire">
+        {RECTOS.map(([s, libelle]) => (
+          <button
+            key={s}
+            role="radio"
+            aria-checked={sens === s}
+            className={"segment" + (sens === s ? " actif" : "")}
+            onClick={() => onChange(s)}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+      {aide && <span className="petit texte-doux">{aide}</span>}
+    </div>
+  );
+}
+
 function resumeQuestion(carte: CarteSeance): string {
   if (carte.genre === "trou") return carte.question.replace("==……==", "……").replace(/\*\*/g, "");
   if (carte.genre === "schema") return `Schéma : ${carte.question}`;

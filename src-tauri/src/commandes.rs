@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Response;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::ia::{self, gemini::ErreurIa};
@@ -848,8 +848,10 @@ pub fn preparer_seance(etat: State<Etat>, mut filtre: revision::FiltreSeance) ->
     if filtre.groupe.is_some() {
         filtre.exclues = etat.reglages.lock().unwrap().matieres_exclues.clone();
     }
-    // Recto choisi pour le vocabulaire : les cartes de l'autre sens attendent (toutes les séances).
-    filtre.sens_exclu = revision::sens_exclu(&etat.reglages.lock().unwrap().sens_vocabulaire);
+    // Recto choisi pour le vocabulaire (celui de la séance ciblée, sinon le réglage) : les cartes de l'autre sens
+    // attendent.
+    let recto = filtre.recto.clone().unwrap_or_else(|| etat.reglages.lock().unwrap().sens_vocabulaire.clone());
+    filtre.sens_exclu = revision::sens_exclu(&recto);
     revision::preparer_seance(&etat.db.lock().unwrap(), &filtre, maintenant_ms(), q).map_err(|e| e.to_string())
 }
 
@@ -1612,6 +1614,19 @@ pub fn web_accueil(app: AppHandle, web: State<web::EspaceWeb>) {
 #[tauri::command]
 pub fn web_masquer(app: AppHandle, web: State<web::EspaceWeb>) {
     web.montrer_seulement(&app, None);
+}
+
+/// Espace web en plein écran : la fenêtre de Révisio occupe tout l'écran (l'interface masque alors le menu).
+/// Une fois (au premier essai du 01/11), Windows n'a pas suivi : on vérifie et on redemande une fois.
+#[tauri::command]
+pub async fn web_plein_ecran(app: AppHandle, actif: bool) -> Result<(), String> {
+    let fenetre = app.get_window("main").ok_or("Fenêtre principale introuvable.")?;
+    fenetre.set_fullscreen(actif).map_err(|e| e.to_string())?;
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    if fenetre.is_fullscreen().map_err(|e| e.to_string())? != actif {
+        fenetre.set_fullscreen(actif).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Texte sélectionné dans la page de l'onglet (pour l'enregistrer comme source).

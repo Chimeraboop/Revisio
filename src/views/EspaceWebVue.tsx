@@ -9,6 +9,8 @@ import {
   BookmarkPlus,
   ExternalLink,
   House,
+  Maximize,
+  Minimize,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -43,6 +45,9 @@ export default function EspaceWebVue() {
   const [onglets, setOnglets] = useState<Onglet[]>([]);
   const [adresse, setAdresse] = useState("");
   const [panneau, setPanneau] = useState(true);
+  /** Plein écran : l'espace web couvre toute la fenêtre, elle-même en plein écran. */
+  const [pleinEcran, setPleinEcran] = useState(false);
+  const pleinEcranRef = useRef(false);
   const [favoris, setFavoris] = useState<Favori[]>([]);
   const [sources, setSources] = useState<SourceWeb[]>([]);
   const [chapitres, setChapitres] = useState<ChapitreIa[]>([]);
@@ -91,8 +96,9 @@ export default function EspaceWebVue() {
     return () => {
       observateur.disconnect();
       abonnements.forEach((a) => a.then((arreter) => arreter()));
-      // En quittant l'espace web, les pages sont masquées (elles restent ouvertes).
+      // En quittant l'espace web, les pages sont masquées (elles restent ouvertes) et le plein écran s'arrête.
       api.webMasquer().catch(() => {});
+      if (pleinEcranRef.current) api.webPleinEcran(false).catch(() => {});
     };
   }, []);
 
@@ -101,11 +107,43 @@ export default function EspaceWebVue() {
     setAdresse(actif?.url ?? "");
   }, [actif?.id, actif?.url]);
 
-  // Le panneau ouvert ou fermé change la taille de la zone.
+  // Le panneau ouvert ou fermé, ou le plein écran, change la place de la zone. Une zone qui ne fait que se
+  // déplacer n'est pas vue par le ResizeObserver : on la remesure après l'affichage, puis quand la fenêtre a
+  // fini de passer en plein écran.
   useEffect(() => {
-    const z = mesurer();
-    if (z && actif) api.webZone(z).catch(() => {});
-  }, [panneau]);
+    const replacer = () => {
+      const z = mesurer();
+      if (z) api.webZone(z).catch(() => {});
+    };
+    const image = requestAnimationFrame(replacer);
+    const delai = setTimeout(replacer, 400);
+    return () => {
+      cancelAnimationFrame(image);
+      clearTimeout(delai);
+    };
+  }, [panneau, pleinEcran]);
+
+  // F11 bascule le plein écran, Échap le quitte (quand la page de Révisio a le clavier, pas le site).
+  useEffect(() => {
+    const touche = (e: KeyboardEvent) => {
+      if (e.key === "F11" || (e.key === "Escape" && pleinEcranRef.current)) {
+        e.preventDefault();
+        basculerPleinEcran(e.key === "F11" ? !pleinEcranRef.current : false);
+      }
+    };
+    window.addEventListener("keydown", touche);
+    return () => window.removeEventListener("keydown", touche);
+  }, []);
+
+  async function basculerPleinEcran(actif: boolean) {
+    pleinEcranRef.current = actif;
+    setPleinEcran(actif);
+    try {
+      await api.webPleinEcran(actif);
+    } catch (e) {
+      setMessage({ texte: messageErreur(e), erreur: true });
+    }
+  }
 
   async function ouvrir(cible: string) {
     const z = mesurer();
@@ -182,7 +220,7 @@ export default function EspaceWebVue() {
   for (const f of favoris) parMatiere.set(f.matiere ?? "Général", [...(parMatiere.get(f.matiere ?? "Général") ?? []), f]);
 
   return (
-    <div className="espace-web">
+    <div className={"espace-web" + (pleinEcran ? " plein-ecran" : "")}>
       <div className="barre-onglets" role="tablist" aria-label="Onglets">
         {onglets.map((o) => (
           <div key={o.id} className={"onglet-web" + (o.actif ? " actif" : "")}>
@@ -233,9 +271,20 @@ export default function EspaceWebVue() {
         >
           <ExternalLink size={15} aria-hidden /> Ouvrir dans mon navigateur
         </button>
-        <button className="bouton" onClick={() => setPanneau(!panneau)} aria-pressed={panneau}>
-          {panneau ? <PanelRightClose size={15} aria-hidden /> : <PanelRightOpen size={15} aria-hidden />}
-          {panneau ? "Masquer le panneau" : "Sources et favoris"}
+        {!pleinEcran && (
+          <button className="bouton" onClick={() => setPanneau(!panneau)} aria-pressed={panneau}>
+            {panneau ? <PanelRightClose size={15} aria-hidden /> : <PanelRightOpen size={15} aria-hidden />}
+            {panneau ? "Masquer le panneau" : "Sources et favoris"}
+          </button>
+        )}
+        <button
+          className="bouton"
+          onClick={() => basculerPleinEcran(!pleinEcran)}
+          aria-pressed={pleinEcran}
+          title={pleinEcran ? "Quitter le plein écran (Échap)" : "Plein écran (F11)"}
+        >
+          {pleinEcran ? <Minimize size={15} aria-hidden /> : <Maximize size={15} aria-hidden />}
+          {pleinEcran ? "Quitter le plein écran" : "Plein écran"}
         </button>
       </div>
       {!enLigne && <p className="message-erreur petit">Hors ligne : les pages web ne peuvent pas se charger.</p>}
@@ -284,7 +333,7 @@ export default function EspaceWebVue() {
           )}
         </div>
 
-        {panneau && (
+        {panneau && !pleinEcran && (
           <aside className="panneau-web">
             <h3>Enregistrer une source</h3>
             <p className="texte-doux petit">

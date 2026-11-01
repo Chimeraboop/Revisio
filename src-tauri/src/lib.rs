@@ -322,6 +322,7 @@ pub fn run() {
             commandes::web_fermer,
             commandes::web_zone,
             commandes::web_masquer,
+            commandes::web_plein_ecran,
             commandes::web_accueil,
             commandes::web_selection,
             commandes::web_eval_debug,

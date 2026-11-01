@@ -463,6 +463,8 @@ export interface FiltreSeance {
   planifies?: ChapitreSeance[];
   /** Séance ciblée : seulement ces chapitres (vide = pas de restriction). */
   chapitres?: ChapitreSeance[];
+  /** Recto du vocabulaire pour cette séance (séance ciblée) ; absent : celui des réglages. */
+  recto?: SensVocabulaire;
 }
 
 /** Un chapitre pour une séance (`matiere` nulle : notes sans matière ; `chapitre` nul : notes générales). */
@@ -475,6 +477,8 @@ export interface ComptesChapitre extends ChapitreSeance {
   dues: number;
   nouvelles: number;
   total: number;
+  /** Cartes de vocabulaire du chapitre. */
+  vocabulaire: number;
 }
 
 // ---------- Dates d'évaluation et planning ----------
@@ -870,6 +874,7 @@ export const api = {
   webFermer: (id: number) => invoke<void>("web_fermer", { id }),
   webZone: (zone: ZoneWeb) => invoke<void>("web_zone", { zone }),
   webMasquer: () => invoke<void>("web_masquer"),
+  webPleinEcran: (actif: boolean) => invoke<void>("web_plein_ecran", { actif }),
   webAccueil: () => invoke<void>("web_accueil"),
   webSelection: (id: number) => invoke<string>("web_selection", { id }),
   favoris: () => invoke<Favori[]>("favoris"),

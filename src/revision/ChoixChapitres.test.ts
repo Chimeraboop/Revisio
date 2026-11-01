@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cleChapitreSeance, parMatiere } from "./ChoixChapitres";
 
-const c = (matiere: string | null, chapitre: string | null) => ({ matiere, chapitre, dues: 1, nouvelles: 0, total: 2 });
+const c = (matiere: string | null, chapitre: string | null) => ({ matiere, chapitre, dues: 1, nouvelles: 0, total: 2, vocabulaire: 0 });
 
 describe("choix des chapitres d'une séance ciblée", () => {
   it("regroupe par matière dans l'ordre reçu, « Hors matière » pour les notes sans matière", () => {
