@@ -49,6 +49,10 @@ pub struct FiltreSeance {
     /// Matières laissées de côté (séances du jour) : posé par Révisio d'après les réglages, pas par l'interface.
     #[serde(skip)]
     pub exclues: Vec<String>,
+    /// Sens des cartes de vocabulaire laissé de côté (« vers_fr » ou « depuis_fr ») : posé par Révisio d'après
+    /// le réglage du recto, pour toutes les séances.
+    #[serde(skip)]
+    pub sens_exclu: Option<String>,
 }
 
 /// Un chapitre d'une matière (`matiere` absente : notes sans matière ; `chapitre` absent : notes générales).
@@ -88,6 +92,22 @@ fn condition_exclues(exclues: &[String], p: &mut Vec<rusqlite::types::Value>) ->
         })
         .collect();
     format!(" AND coalesce(c.matiere, '{HORS_MATIERE}') NOT IN ({})", marques.join(", "))
+}
+
+/// Sens de vocabulaire à laisser de côté d'après le réglage du recto (« etranger », « francais » ou « les_deux »).
+pub fn sens_exclu(recto: &str) -> Option<String> {
+    match recto {
+        "etranger" => Some("depuis_fr".into()),
+        "francais" => Some("vers_fr".into()),
+        _ => None,
+    }
+}
+
+/// `AND NOT (carte de vocabulaire dans ce sens)` (valeur ajoutée à `p`), ou rien.
+fn condition_sens(sens_exclu: Option<&str>, p: &mut Vec<rusqlite::types::Value>) -> String {
+    let Some(sens) = sens_exclu else { return String::new() };
+    p.push(rusqlite::types::Value::Text(sens.to_string()));
+    format!(" AND NOT (c.genre = 'vocabulaire' AND json_extract(c.donnees, '$.sens') IS ?{})", p.len())
 }
 
 /// Les deux séances du jour sont séparées : les langues (toutes les cartes de vocabulaire,
@@ -195,6 +215,7 @@ fn conditions(f: &FiltreSeance) -> (String, Vec<rusqlite::types::Value>) {
         sql += &format!(" AND {}", condition_chapitres(&f.chapitres, &mut valeurs));
     }
     sql += &condition_exclues(&f.exclues, &mut valeurs);
+    sql += &condition_sens(f.sens_exclu.as_deref(), &mut valeurs);
     (sql, valeurs)
 }
 
@@ -547,6 +568,7 @@ pub fn resume(
     debut_jour: i64,
     quotas: Quotas,
     exclues: &[String],
+    sens_exclu: Option<&str>,
 ) -> rusqlite::Result<Resume> {
     let mut req = conn.prepare(
         "SELECT coalesce(matiere, 'Hors matière'),
@@ -580,7 +602,7 @@ pub fn resume(
     let mut groupes = Vec::new();
     for g in Groupe::TOUS {
         let mut p = vec![rusqlite::types::Value::Integer(maintenant)];
-        let sans_exclues = condition_exclues(exclues, &mut p);
+        let sans_exclues = condition_exclues(exclues, &mut p) + &condition_sens(sens_exclu, &mut p);
         let (dues, nouvelles): (i64, i64) = conn.query_row(
             &format!(
                 "SELECT coalesce(sum(c.echeance IS NOT NULL AND c.echeance <= ?1), 0), coalesce(sum(c.etat_fsrs IS NULL), 0)
@@ -790,7 +812,7 @@ mod tests {
         let mut conn = base();
         let maintenant = 1_800_000_000_000;
         marquer_apprises(&mut conn, maintenant).unwrap();
-        let r = resume(&conn, maintenant, maintenant - 1000, q(0), &[]).unwrap();
+        let r = resume(&conn, maintenant, maintenant - 1000, q(0), &[], None).unwrap();
         assert!(r.chapitres.len() >= 2, "le vault d'exemple a plusieurs chapitres");
         let total: i64 = conn.query_row("SELECT count(*) FROM cartes WHERE active = 1", [], |r| r.get(0)).unwrap();
         assert_eq!(r.chapitres.iter().map(|c| c.total).sum::<i64>(), total);
@@ -817,7 +839,7 @@ mod tests {
     #[test]
     fn matieres_exclues_des_seances_du_jour() {
         let conn = base();
-        let r = resume(&conn, 2_000, 1_000, q(500), &[]).unwrap();
+        let r = resume(&conn, 2_000, 1_000, q(500), &[], None).unwrap();
         let jour = |exclues: Vec<String>| FiltreSeance { groupe: Some(Groupe::Autres), exclues, ..filtre() };
         let avant = preparer_seance(&conn, &jour(vec![]), 2_000, q(500)).unwrap().nouvelles;
         // Une matière présente dans la séance « Autres matières ».
@@ -829,9 +851,27 @@ mod tests {
         let sans = preparer_seance(&conn, &jour(vec![HORS_MATIERE.into()]), 2_000, q(500)).unwrap().nouvelles;
         assert!(sans.iter().all(|c| c.matiere.is_some()));
         // Les compteurs des séances du jour suivent l'exclusion.
-        let r2 = resume(&conn, 2_000, 1_000, q(500), &[exclue.clone()]).unwrap();
+        let r2 = resume(&conn, 2_000, 1_000, q(500), &[exclue.clone()], None).unwrap();
         let nouvelles = |r: &Resume| r.groupes.iter().map(|g| g.nouvelles_disponibles).sum::<i64>();
         assert!(nouvelles(&r2) < nouvelles(&r));
+    }
+
+    #[test]
+    fn recto_du_vocabulaire_choisi() {
+        let conn = base();
+        let langues = |recto: &str| FiltreSeance { groupe: Some(Groupe::Langues), sens_exclu: sens_exclu(recto), ..filtre() };
+        let sens = |recto: &str| -> Vec<String> {
+            let s = preparer_seance(&conn, &langues(recto), 2_000, q(500)).unwrap();
+            s.nouvelles.iter().map(|c| c.donnees["sens"].as_str().unwrap().to_string()).collect()
+        };
+        let tous = sens("les_deux");
+        assert!(tous.iter().any(|s| s == "vers_fr") && tous.iter().any(|s| s == "depuis_fr"));
+        assert!(sens("etranger").iter().all(|s| s == "vers_fr"));
+        assert!(sens("francais").iter().all(|s| s == "depuis_fr"));
+        assert_eq!(sens("etranger").len() + sens("francais").len(), tous.len());
+        // Le compteur de la séance « Langues » suit le recto choisi.
+        let r = resume(&conn, 2_000, 1_000, q(500), &[], sens_exclu("francais").as_deref()).unwrap();
+        assert_eq!(r.groupes[0].nouvelles_disponibles as usize, sens("francais").len());
     }
 
     #[test]
@@ -848,7 +888,7 @@ mod tests {
         assert!(a.iter().all(|c| c.genre != "vocabulaire"));
         // Sans groupe : les deux quotas s'additionnent.
         assert_eq!(preparer_seance(&conn, &filtre(), 2_000, quotas).unwrap().nouvelles.len(), 5);
-        let r = resume(&conn, 2_000, 1_000, quotas, &[]).unwrap();
+        let r = resume(&conn, 2_000, 1_000, quotas, &[], None).unwrap();
         assert_eq!(r.groupes.iter().map(|g| g.nouvelles_restantes).collect::<Vec<_>>(), vec![2, 3]);
     }
 

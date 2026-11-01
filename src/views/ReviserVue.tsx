@@ -16,6 +16,7 @@ import {
   Reglages,
   ResumeRevision,
   Seance,
+  SensVocabulaire,
 } from "../lib/api";
 import { cleChapitre, concerneGroupe } from "../planning/planning";
 import { usePlanning } from "../planning/usePlanning";
@@ -36,6 +37,13 @@ interface Props {
   /** Réglages modifiés depuis cet écran (matières exclues des séances du jour). */
   onReglages: (r: Reglages) => void;
 }
+
+/** Choix du recto des cartes de vocabulaire, comme dans Quizlet. */
+const RECTOS: [SensVocabulaire, string][] = [
+  ["les_deux", "Les deux sens"],
+  ["etranger", "Langue étrangère"],
+  ["francais", "Français"],
+];
 
 export function dureeDuGroupe(reglages: Reglages, groupe: GroupeRevision): number {
   return groupe === "langues" ? reglages.dureeSeanceLangues : reglages.dureeSeance;
@@ -156,6 +164,16 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
     }
   }
 
+  /** Recto des cartes de vocabulaire (réglage enregistré, pour toutes les séances). */
+  async function choisirRecto(sens: SensVocabulaire) {
+    try {
+      onReglages(await api.definirSensVocabulaire(sens));
+      recharger();
+    } catch (e) {
+      setMessage(messageErreur(e));
+    }
+  }
+
   /** Tout un chapitre (même les cartes pas encore à revoir), éventuellement d'un seul type de cartes. */
   async function reviserChapitre(c: ChapitreChoisi, genresVoulus: GenreCarte[] = []) {
     await lancer(
@@ -219,7 +237,7 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
               <h2>Séance du jour — {NOMS_GROUPES[g]}</h2>
               {rg && resume ? (
                 <p className="texte-doux">
-                  {g === "langues" ? "Tout le vocabulaire · " : "Textes à trous, schémas, remises dans l'ordre · "}
+                  {g === "langues" ? "Tout le vocabulaire · " : "Questions de tes cours, QCM, schémas · "}
                   {planDuGroupe.length > 0 && "d'abord les chapitres du planning, puis "}
                   {rg.dues} à revoir, puis les points faibles, puis {Math.min(rg.nouvellesRestantes, rg.nouvellesDisponibles)}{" "}
                   nouvelle{rg.nouvellesRestantes > 1 ? "s" : ""} · {duree} min environ (
@@ -228,6 +246,24 @@ export default function ReviserVue({ reglages, indexation, demandeSeanceDuJour, 
                 </p>
               ) : (
                 <p className="texte-doux">Chargement…</p>
+              )}
+              {g === "langues" && (
+                <div className="rangee choix-recto">
+                  <span className="petit texte-doux">Au recto :</span>
+                  <div className="segmente" role="radiogroup" aria-label="Côté montré au recto des cartes de vocabulaire">
+                    {RECTOS.map(([sens, libelle]) => (
+                      <button
+                        key={sens}
+                        role="radio"
+                        aria-checked={reglages.sensVocabulaire === sens}
+                        className={"segment" + (reglages.sensVocabulaire === sens ? " actif" : "")}
+                        onClick={() => choisirRecto(sens)}
+                      >
+                        {libelle}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               {planDuGroupe.length > 0 && (
                 <p className="petit">

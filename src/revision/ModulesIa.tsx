@@ -258,3 +258,28 @@ export const ouverte: ModuleCarte<string> = {
   evaluer: () => ({ verdict: "juste" }),
   enTexte: (r) => r,
 };
+
+const simplifier = (t: string) => t.replace(/[\s.«»"]+/g, " ").trim().toLowerCase();
+
+/** Carte d'un cours, créée par l'IA à l'arrivée de la note : question au recto, réponse courte au verso (comme Quizlet). */
+export const question: ModuleCarte<string> = {
+  mode: () => "retourner",
+  consigne: (carte) => (carte.donnees.notion ? String(carte.donnees.notion) : "Question"),
+  reponseInitiale: () => "",
+  Question: ({ carte }) => (
+    <div className="question-carte">
+      <MarkdownObsidian markdown={carte.question} navigation={sansNavigation(carte)} />
+    </div>
+  ),
+  Correction: ({ carte }) => (
+    <div className="correction-carte">
+      <div className="reponse-carte">
+        <MarkdownObsidian markdown={carte.reponse} navigation={sansNavigation(carte)} />
+      </div>
+      {/* La phrase de la note, sauf si la réponse la recopie déjà. */}
+      {simplifier(String(carte.donnees.citation ?? "")) !== simplifier(carte.reponse) && <Source carte={carte} />}
+    </div>
+  ),
+  evaluer: () => ({ verdict: "juste" }),
+  enTexte: (r) => r,
+};

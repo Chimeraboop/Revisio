@@ -182,8 +182,8 @@ function CarteEnCours({ carte, module, reglages, onNotee, onRetiree }: PropsCart
     else setPhase("confiance");
   }
 
-  // Vocabulaire à retourner : une vraie carte recto / verso, qui se retourne d'un clic (comme Quizlet).
-  const retournable = mode === "retourner" && carte.genre === "vocabulaire";
+  // Vocabulaire à retourner et questions des cours : une vraie carte recto / verso, qui se retourne d'un clic (comme Quizlet).
+  const retournable = mode === "retourner" && (carte.genre === "vocabulaire" || carte.genre === "question");
   const [verso, setVerso] = useState(false);
   const [secousse, setSecousse] = useState(0);
 

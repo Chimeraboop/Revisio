@@ -19,7 +19,7 @@ import {
   Sparkles,
   Globe,
 } from "lucide-react";
-import { api, ChapitreChoisi, InfosApp, LotPhotos, messageErreur, Reglages } from "./lib/api";
+import { api, ChapitreChoisi, EtatCartesIa, InfosApp, LotPhotos, messageErreur, Reglages } from "./lib/api";
 import { definirModeLocalCourant, useEnLigne } from "./lib/connexion";
 import { useIndexation } from "./lib/indexation";
 import { listen } from "@tauri-apps/api/event";
@@ -177,6 +177,21 @@ export default function App() {
     };
   }, []);
 
+  // Cartes des cours créées par l'IA en arrière-plan : une notification quand tout est à jour.
+  useEffect(() => {
+    const arret = listen<EtatCartesIa>("cartes-ia-fini", ({ payload: e }) =>
+      signalerTacheTerminee({
+        genre: "cartes-cours",
+        titre: `Cartes de tes cours · ${e.chapitres.slice(0, 2).join(" ; ")}${e.chapitres.length > 2 ? ` et ${e.chapitres.length - 2} autres chapitres` : ""}`,
+        ecran: "atelier",
+        resume: `${e.cartesCreees} carte${e.cartesCreees > 1 ? "s" : ""} pour ${e.notesTraitees} note${e.notesTraitees > 1 ? "s" : ""}`,
+      }),
+    );
+    return () => {
+      arret.then((f) => f());
+    };
+  }, []);
+
   // Les générations par l'IA ne notifient pas la fin si l'élève regarde déjà l'écran concerné.
   useEffect(() => definirEcranActif(vue), [vue]);
 
@@ -324,7 +339,8 @@ export default function App() {
         ) : vue === "atelier" ? (
           <AtelierIaVue
             onReglages={() => setVue("reglages")}
-            onReviserQuestions={(chapitre) => demander({ chapitre, genres: ["qcm", "ouverte"] })}
+            onReglagesModifies={setReglages}
+            onReviserQuestions={(chapitre) => demander({ chapitre, genres: ["qcm", "ouverte", "question"] })}
             onOuvrirCartes={(c) => {
               setDemandeCarte({ ...c });
               setVue("cartes");

@@ -6,6 +6,7 @@
 pub mod audio;
 pub mod calcul;
 pub mod cartes;
+pub mod cartes_ia;
 pub mod cartes_mentales;
 pub mod db;
 pub mod discussion;
@@ -56,6 +57,8 @@ pub struct Etat {
     pub taches: taches::Taches,
     /// Surveillance du dossier des photos de cours.
     pub photos: photos::Suivi,
+    /// Cartes des cours créées par l'IA en arrière-plan.
+    pub cartes_ia: cartes_ia::Suivi,
 }
 
 impl Etat {
@@ -154,6 +157,8 @@ pub fn lancer_indexation(app: &AppHandle) {
         }
         ix.en_cours = false;
         let _ = app.emit("indexation", ix.clone());
+        // De nouvelles notes de cours attendent peut-être leurs cartes.
+        etat.cartes_ia.reveiller();
         break;
     });
 }
@@ -179,6 +184,7 @@ pub fn run() {
             ia,
             taches: taches::Taches::default(),
             photos: Default::default(),
+            cartes_ia: Default::default(),
         })
         .setup(|app| {
             {
@@ -192,6 +198,7 @@ pub fn run() {
                 );
             }
             photos::demarrer_surveillance(app.handle().clone());
+            cartes_ia::demarrer(app.handle().clone());
             if app.state::<Etat>().reglages.lock().unwrap().chemin_vault.is_some() {
                 lancer_indexation(app.handle());
                 demarrer_surveillance(app.handle());
@@ -260,6 +267,10 @@ pub fn run() {
             discussion::points_fonction,
             discussion::ajouter_creation_a_note,
             commandes::definir_matieres_exclues,
+            commandes::definir_sens_vocabulaire,
+            commandes::bilan_cartes_ia,
+            commandes::definir_cartes_ia_auto,
+            commandes::reessayer_cartes_ia,
             commandes::enregistrer_revision,
             commandes::suspendre_carte,
             commandes::carnet_erreurs,

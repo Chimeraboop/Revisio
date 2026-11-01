@@ -362,6 +362,18 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX creations_ia_conv ON creations_ia(conversation_id, message_id);
     "#,
+    // 15 — cartes des cours créées par l'IA : notes déjà traitées (et taille du texte à ce moment-là).
+    r#"
+    CREATE TABLE cartes_ia_notes (
+        chemin  TEXT PRIMARY KEY,
+        statut  TEXT NOT NULL,              -- faite | vide | erreur
+        taille  INTEGER NOT NULL DEFAULT 0, -- caractères du texte de la note quand elle a été traitée
+        cartes  INTEGER NOT NULL DEFAULT 0,
+        essais  INTEGER NOT NULL DEFAULT 0,
+        erreur  TEXT,
+        maj     INTEGER NOT NULL
+    );
+    "#,
 ];
 
 pub fn lire_meta(conn: &Connection, cle: &str) -> Option<String> {

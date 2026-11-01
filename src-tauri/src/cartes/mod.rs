@@ -81,10 +81,15 @@ pub fn cartes_de_note(note: &NoteSource, sections: &[SectionSource]) -> Vec<Cart
 /// Les cartes qui ne sont plus produites sont désactivées (jamais supprimées : on garde l'historique).
 pub fn synchroniser(conn: &mut Connection, maintenant: i64) -> Result<RapportCartes, String> {
     let (notes, sections) = charger_sources(conn).map_err(|e| e.to_string())?;
+    let remplacees = crate::cartes_ia::notes_remplacees(conn).map_err(|e| e.to_string())?;
     let mut generees: Vec<(&NoteSource, CarteGeneree)> = Vec::new();
     for note in &notes {
         let secs = sections.get(&note.id).map(Vec::as_slice).unwrap_or(&[]);
         for c in cartes_de_note(note, secs) {
+            // L'IA a fait les cartes de cette note : ses textes à trous et listes à remettre dans l'ordre partent.
+            if remplacees.contains(&note.chemin) && matches!(c.genre, "trou" | "ordre") {
+                continue;
+            }
             generees.push((note, c));
         }
     }

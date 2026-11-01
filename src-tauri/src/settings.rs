@@ -37,6 +37,9 @@ pub struct Reglages {
     pub vocab_vers_francais: String,
     /// Vocabulaire français → langue étrangère : "retourner" ou "taper".
     pub vocab_depuis_francais: String,
+    /// Recto des cartes de vocabulaire en révision : "les_deux", "etranger" (langue étrangère au recto)
+    /// ou "francais" (français au recto). Les cartes de l'autre sens attendent.
+    pub sens_vocabulaire: String,
     /// Durée visée pour la séance du jour « Autres matières », en minutes.
     pub duree_seance: u32,
     /// Durée visée pour la séance du jour « Langues », en minutes.
@@ -70,6 +73,8 @@ pub struct Reglages {
     /// L'élève autorise Révisio à écrire dans le vault (notes tirées des photos, mode Modifier).
     /// Désactivé par défaut : le vault reste alors en lecture seule.
     pub ecriture_autorisee: bool,
+    /// L'IA crée toute seule les cartes des notes de cours (nouvelles ou bien allongées), en arrière-plan.
+    pub cartes_ia_auto: bool,
     /// Dossier surveillé où arrivent les photos de cours (par ex. un dossier Google Drive synchronisé).
     pub dossier_photos: Option<String>,
 }
@@ -87,6 +92,7 @@ impl Default for Reglages {
             entrelacement: true,
             vocab_vers_francais: "retourner".into(),
             vocab_depuis_francais: "taper".into(),
+            sens_vocabulaire: "les_deux".into(),
             duree_seance: 20,
             duree_seance_langues: 10,
             // Modèles stables du niveau gratuit d'après ai.google.dev (octobre 2026) ;
@@ -105,6 +111,7 @@ impl Default for Reglages {
             mode_local: false,
             matieres_exclues: Vec::new(),
             ecriture_autorisee: false,
+            cartes_ia_auto: true,
             dossier_photos: None,
         }
     }

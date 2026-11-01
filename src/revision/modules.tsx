@@ -5,7 +5,7 @@ import type { CarteSeance, Reglages } from "../lib/api";
 import { MarkdownObsidian } from "../markdown/rendu";
 import { schema } from "./ModuleSchema";
 import { ordre } from "./ModuleOrdre";
-import { ouverte, qcm } from "./ModulesIa";
+import { ouverte, qcm, question } from "./ModulesIa";
 import { TexteMaths } from "./symboles";
 import { verifier, type Resultat } from "./verification";
 
@@ -118,6 +118,7 @@ export const MODULES: Record<string, ModuleCarte<unknown>> = {
   ordre: ordre as ModuleCarte<unknown>,
   qcm: qcm as ModuleCarte<unknown>,
   ouverte: ouverte as ModuleCarte<unknown>,
+  question: question as ModuleCarte<unknown>,
 };
 
 export const NOMS_GENRES: Record<string, string> = {
@@ -127,5 +128,6 @@ export const NOMS_GENRES: Record<string, string> = {
   ordre: "Remise dans l'ordre",
   qcm: "QCM (IA)",
   ouverte: "Questions ouvertes (IA)",
+  question: "Questions des cours (IA)",
   examen: "Exercice ou examen",
 };

@@ -833,8 +833,12 @@ fn quotas(etat: &Etat) -> revision::Quotas {
 #[tauri::command]
 pub fn resume_revision(etat: State<Etat>, debut_jour: i64) -> Result<revision::Resume, String> {
     let q = quotas(&etat);
-    let exclues = etat.reglages.lock().unwrap().matieres_exclues.clone();
-    revision::resume(&etat.db.lock().unwrap(), maintenant_ms(), debut_jour, q, &exclues).map_err(|e| e.to_string())
+    let (exclues, sens) = {
+        let r = etat.reglages.lock().unwrap();
+        (r.matieres_exclues.clone(), revision::sens_exclu(&r.sens_vocabulaire))
+    };
+    revision::resume(&etat.db.lock().unwrap(), maintenant_ms(), debut_jour, q, &exclues, sens.as_deref())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -844,7 +848,41 @@ pub fn preparer_seance(etat: State<Etat>, mut filtre: revision::FiltreSeance) ->
     if filtre.groupe.is_some() {
         filtre.exclues = etat.reglages.lock().unwrap().matieres_exclues.clone();
     }
+    // Recto choisi pour le vocabulaire : les cartes de l'autre sens attendent (toutes les séances).
+    filtre.sens_exclu = revision::sens_exclu(&etat.reglages.lock().unwrap().sens_vocabulaire);
     revision::preparer_seance(&etat.db.lock().unwrap(), &filtre, maintenant_ms(), q).map_err(|e| e.to_string())
+}
+
+/// Recto des cartes de vocabulaire en révision : « les_deux », « etranger » ou « francais ».
+#[tauri::command]
+pub fn definir_sens_vocabulaire(etat: State<Etat>, sens: String) -> Result<Reglages, String> {
+    if !["les_deux", "etranger", "francais"].contains(&sens.as_str()) {
+        return Err("Sens inconnu.".into());
+    }
+    modifier_reglages(&etat, |r| r.sens_vocabulaire = sens)
+}
+
+/// Cartes des cours créées par l'IA : avancement, notes en échec.
+#[tauri::command]
+pub fn bilan_cartes_ia(etat: State<Etat>) -> Result<crate::cartes_ia::Bilan, String> {
+    let actif = etat.reglages.lock().unwrap().cartes_ia_auto;
+    let suivi = etat.cartes_ia.etat.lock().unwrap().clone();
+    crate::cartes_ia::bilan(&etat.db.lock().unwrap(), actif, suivi, maintenant_ms()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn definir_cartes_ia_auto(etat: State<Etat>, actif: bool) -> Result<Reglages, String> {
+    let r = modifier_reglages(&etat, |r| r.cartes_ia_auto = actif)?;
+    etat.cartes_ia.reveiller();
+    Ok(r)
+}
+
+/// Les notes en échec repartent tout de suite.
+#[tauri::command]
+pub fn reessayer_cartes_ia(etat: State<Etat>) -> Result<(), String> {
+    crate::cartes_ia::reessayer(&etat.db.lock().unwrap()).map_err(|e| e.to_string())?;
+    etat.cartes_ia.reveiller();
+    Ok(())
 }
 
 /// Matières laissées de côté dans les séances du jour.

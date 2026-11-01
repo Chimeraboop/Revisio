@@ -27,6 +27,8 @@ export interface Reglages {
   entrelacement: boolean;
   vocabVersFrancais: ModeReponse;
   vocabDepuisFrancais: ModeReponse;
+  /** Recto des cartes de vocabulaire en révision (les cartes de l'autre sens attendent). */
+  sensVocabulaire: SensVocabulaire;
   dureeSeance: number;
   nouvellesParJourLangues: number;
   dureeSeanceLangues: number;
@@ -49,6 +51,30 @@ export interface Reglages {
   ecritureAutorisee: boolean;
   /** Dossier surveillé où arrivent les photos de cours. */
   dossierPhotos: string | null;
+  /** L'IA crée toute seule les cartes des notes de cours. */
+  cartesIaAuto: boolean;
+}
+
+/** « etranger » : la langue étrangère au recto ; « francais » : le français au recto. */
+export type SensVocabulaire = "les_deux" | "etranger" | "francais";
+
+/** Cartes des cours créées par l'IA en arrière-plan. */
+export interface EtatCartesIa {
+  enCours: string | null;
+  attente: string | null;
+  notesTraitees: number;
+  cartesCreees: number;
+  chapitres: string[];
+}
+
+export interface BilanCartesIa {
+  actif: boolean;
+  etat: EtatCartesIa;
+  notes: number;
+  faites: number;
+  aFaire: number;
+  cartes: number;
+  erreurs: { chemin: string; titre: string; erreur: string }[];
 }
 
 /** Un lot de photos de cours (un cours) et ce qu'il a donné. */
@@ -367,7 +393,7 @@ export const NOMS_GROUPES: Record<GroupeRevision, string> = {
 };
 
 /** « examen » : erreur faite dans un exercice ou un examen (sans carte de révision). */
-export type GenreCarte = "vocabulaire" | "trou" | "schema" | "ordre" | "qcm" | "ouverte" | "examen";
+export type GenreCarte = "vocabulaire" | "trou" | "schema" | "ordre" | "qcm" | "ouverte" | "question" | "examen";
 
 export interface CarteSeance {
   id: number;
@@ -819,6 +845,10 @@ export const api = {
   resumeRevision: () => invoke<ResumeRevision>("resume_revision", { debutJour: debutDuJour() }),
   preparerSeance: (filtre: FiltreSeance) => invoke<Seance>("preparer_seance", { filtre }),
   definirMatieresExclues: (matieres: string[]) => invoke<Reglages>("definir_matieres_exclues", { matieres }),
+  definirSensVocabulaire: (sens: SensVocabulaire) => invoke<Reglages>("definir_sens_vocabulaire", { sens }),
+  bilanCartesIa: () => invoke<BilanCartesIa>("bilan_cartes_ia"),
+  definirCartesIaAuto: (actif: boolean) => invoke<Reglages>("definir_cartes_ia_auto", { actif }),
+  reessayerCartesIa: () => invoke<void>("reessayer_cartes_ia"),
   enregistrerRevision: (revision: NouvelleRevision) => invoke<void>("enregistrer_revision", { revision }),
   suspendreCarte: (carteId: number) => invoke<void>("suspendre_carte", { carteId }),
   carnetErreurs: (matiere: string | null, avecComprises: boolean) =>

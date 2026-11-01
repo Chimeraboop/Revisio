@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { FolderOpen, KeyRound, Layers, ListChecks, Network, Shapes, Sparkles } from "lucide-react";
 import EntetePage from "../composants/EntetePage";
 import Message from "../composants/Message";
-import { api, ChapitreChoisi, ChapitreIa, EstimationIa, messageErreur, ResultatGeneration } from "../lib/api";
+import { api, ChapitreChoisi, ChapitreIa, EstimationIa, messageErreur, Reglages, ResultatGeneration } from "../lib/api";
 import { useModeLocal } from "../lib/connexion";
 import { nomModele, useMoteurIa } from "../lib/moteurIa";
 import { lancerTache, useDerniereTache } from "../lib/taches";
 import { BoutonArreter } from "../composants/TachesIa";
 import BadgeIa from "./BadgeIa";
+import CartesDesCours from "./CartesDesCours";
 import FeynmanVue from "./FeynmanVue";
 import VisionSchemas from "./VisionSchemas";
 
@@ -21,12 +22,14 @@ interface Props {
   onOuvrirCartes: (c: ChapitreChoisi) => void;
   /** Ouvre l'onglet Créations de l'écran « Discuter avec l'IA ». */
   onOuvrirVisuels: () => void;
+  /** Réglage modifié depuis cet écran (création automatique des cartes des cours). */
+  onReglagesModifies: (r: Reglages) => void;
 }
 
 const cle = (c: ChapitreIa) => `${c.matiere}|${c.chapitre ?? ""}`;
 const nomChapitre = (c: ChapitreIa) => c.chapitre ?? "Notes générales de la matière";
 
-export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirCartes, onOuvrirVisuels }: Props) {
+export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirCartes, onOuvrirVisuels, onReglagesModifies }: Props) {
   /** Schémas et graphiques gardés dans les discussions avec l'IA. */
   const [visuels, setVisuels] = useState(0);
   useEffect(() => {
@@ -126,6 +129,8 @@ export default function AtelierIaVue({ onReglages, onReviserQuestions, onOuvrirC
           </button>
         </Message>
       )}
+
+      <CartesDesCours onReglagesModifies={onReglagesModifies} />
 
       {(creations.length > 0 || visuels > 0) && (
         <section className="carte bloc apparait" style={{ "--i": 1 } as React.CSSProperties}>

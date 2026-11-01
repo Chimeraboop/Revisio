@@ -41,6 +41,11 @@ pub struct LotQuestions {
 /// `nombre` questions exactement : les petits modèles locaux s'arrêtent sinon après une ou deux questions
 /// (Ollama impose le nombre pendant la génération ; Gemini le respecte aussi, vérifié le 20/10/2026).
 pub fn schema(nombre: usize) -> Value {
+    schema_types(nombre, &["qcm", "ouverte"])
+}
+
+/// Même schéma, pour d'autres genres de questions (« question » : carte recto / verso des cours).
+pub fn schema_types(nombre: usize, types: &[&str]) -> Value {
     json!({
         "type": "object",
         "properties": {
@@ -51,11 +56,11 @@ pub fn schema(nombre: usize) -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "type": { "type": "string", "enum": ["qcm", "ouverte"] },
+                        "type": { "type": "string", "enum": types },
                         "enonce": { "type": "string", "description": "La question, autonome et compréhensible sans voir l'extrait." },
                         "choix": { "type": "array", "items": { "type": "string" }, "description": "Exactement 4 propositions affirmatives pour un QCM (une seule juste, distracteurs plausibles, sans lettre A/B/C/D devant, jamais une question) ; liste vide pour une question ouverte." },
                         "bonne_reponse": { "type": "integer", "description": "QCM : position de la bonne proposition dans « choix », en comptant à partir de 0 (0 = la première, 3 = la quatrième) ; -1 pour une question ouverte." },
-                        "reponse_attendue": { "type": "string", "description": "Question ouverte : réponse modèle complète et concise. QCM : une phrase qui explique pourquoi la bonne proposition est juste (jamais une simple lettre)." },
+                        "reponse_attendue": { "type": "string", "description": "Question ouverte ou carte « question » : réponse modèle complète et concise. QCM : une phrase qui explique pourquoi la bonne proposition est juste (jamais une simple lettre)." },
                         "source": { "type": "string", "description": "Identifiant de l'extrait source, par exemple E3." },
                         "citation": { "type": "string", "description": "Phrase recopiée mot pour mot de l'extrait source (sans son identifiant), qui justifie la réponse." },
                         "notion": { "type": "string", "description": "La notion travaillée, en quelques mots." }
@@ -247,6 +252,11 @@ pub fn defaut(q: &QuestionIa, extraits: &[Extrait]) -> Option<String> {
                 return Some("la bonne réponse désignée ne correspond pas à la citation".into());
             }
         }
+        "question" => {
+            if q.reponse_attendue.trim().is_empty() {
+                return Some("réponse manquante".into());
+            }
+        }
         "ouverte" => {
             if q.reponse_attendue.trim().len() < 3 {
                 return Some("réponse attendue manquante".into());
@@ -325,7 +335,7 @@ pub fn enregistrer(
 /// Énoncés des questions IA déjà créées pour ce chapitre (pour éviter les doublons).
 pub fn deja_posees(conn: &Connection, matiere: &str, chapitre: Option<&str>) -> rusqlite::Result<Vec<String>> {
     conn.prepare(
-        "SELECT question FROM cartes WHERE cle LIKE 'ia|%' AND genre IN ('qcm', 'ouverte')
+        "SELECT question FROM cartes WHERE cle LIKE 'ia|%' AND genre IN ('qcm', 'ouverte', 'question')
          AND matiere = ?1 AND chapitre IS ?2 AND suspendue = 0 ORDER BY id DESC LIMIT 60",
     )?
     .query_map(params![matiere, chapitre], |r| r.get(0))?
