@@ -1221,9 +1221,9 @@ pub fn chapitres_ia(etat: State<Etat>) -> Result<Vec<ChapitreIa>, String> {
     let mut req = conn
         .prepare(
             "SELECT n.matiere, n.chapitre, count(*),
-                    (SELECT count(*) FROM cartes c WHERE c.cle LIKE 'ia|%' AND c.suspendue = 0
+                    (SELECT count(*) FROM cartes c WHERE c.cle LIKE 'ia|%' AND c.genre <> 'vocabulaire' AND c.suspendue = 0
                        AND c.matiere = n.matiere AND c.chapitre IS n.chapitre),
-                    (SELECT count(*) FROM cartes c WHERE c.cle LIKE 'ia|%' AND c.suspendue = 0 AND c.active = 1
+                    (SELECT count(*) FROM cartes c WHERE c.cle LIKE 'ia|%' AND c.genre <> 'vocabulaire' AND c.suspendue = 0 AND c.active = 1
                        AND c.echeance IS NOT NULL AND c.echeance <= ?1
                        AND c.matiere = n.matiere AND c.chapitre IS n.chapitre),
                     (SELECT count(*) FROM cartes_mentales m WHERE m.matiere = n.matiere AND m.chapitre IS n.chapitre)

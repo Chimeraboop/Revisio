@@ -232,7 +232,7 @@ pub fn lots(notes: &[(NoteAFaire, Vec<Extrait>)]) -> Vec<Lot> {
 }
 
 /// Consigne : des cartes comme de bonnes fiches Quizlet, sur l'essentiel du cours.
-pub fn consigne(nombre: usize, deja_posees: &[String]) -> String {
+pub fn consigne(nombre: usize, deja_posees: &[String], langue: bool) -> String {
     let mut c = format!(
         "Crée {nombre} cartes de révision sur ces extraits de cours, comme de bonnes fiches Quizlet.\n\
          Environ trois quarts de cartes de type « question » : au recto une question précise, au verso une réponse \
@@ -248,6 +248,11 @@ pub fn consigne(nombre: usize, deja_posees: &[String]) -> String {
          - Pas deux cartes sur la même chose. Répartis les cartes sur tous les extraits, en proportion de leur contenu.\n\
          - Formules en LaTeX entre $…$."
     );
+    if langue {
+        c += "\n- Cours de langue : JAMAIS de carte de vocabulaire (sens d'un mot ou d'une expression, « comment dit-on », \
+              traduction) ; Révisio en fait déjà des cartes recto / verso. Pose des questions sur le contenu (culture, \
+              histoire, faits) et la grammaire.";
+    }
     if !deja_posees.is_empty() {
         c += "\nCes cartes existent déjà : ne les refais pas.\n";
         for q in deja_posees.iter().take(40) {
@@ -255,6 +260,14 @@ pub fn consigne(nombre: usize, deja_posees: &[String]) -> String {
         }
     }
     c
+}
+
+/// Question qui demande une traduction : dans une langue, le vocabulaire se révise en cartes recto / verso.
+pub fn est_question_de_vocabulaire(enonce: &str) -> bool {
+    let e = enonce.trim_start().to_lowercase();
+    ["que signifie", "que veut dire", "comment dit-on", "comment dire", "tradui", "quel mot", "quelle expression"]
+        .iter()
+        .any(|debut| e.starts_with(debut))
 }
 
 /// Notes dont l'IA a fait les cartes : leurs textes à trous et listes à remettre dans l'ordre sont retirés.
@@ -499,6 +512,8 @@ async fn traiter(app: &AppHandle, etat: &Etat, chapitre: &Chapitre) -> Result<()
     let modele = etat.reglages.lock().unwrap().modele_ia_rapide.clone();
     // L'IA locale seulement si l'élève l'a choisie pour tout (pas en secours : des heures de calcul en silence).
     let local = etat.config_locale().filter(|l| l.mode == ia::ModeLocal::Toujours);
+    let langue = crate::cartes::vocabulaire::matiere_de_langue(Some(&chapitre.matiere));
+    let garder = |q: &questions::QuestionIa| !(langue && est_question_de_vocabulaire(&q.enonce));
     for lot in lots(&notes) {
         if !etat.reglages.lock().unwrap().cartes_ia_auto {
             return Ok(());
@@ -508,7 +523,7 @@ async fn traiter(app: &AppHandle, etat: &Etat, chapitre: &Chapitre) -> Result<()
             systeme: ia::ancrage::CONSIGNE_ANCRAGE.into(),
             parties: vec![Partie::Texte(format!(
                 "{}\n\nExtraits des notes ({nom}) :\n\n{}",
-                consigne(lot.nombre, &deja),
+                consigne(lot.nombre, &deja, langue),
                 ia::ancrage::texte_des_extraits(&lot.extraits)
             ))],
             schema: Some(questions::schema_types(lot.nombre, &["question", "qcm"])),
@@ -528,8 +543,12 @@ async fn traiter(app: &AppHandle, etat: &Etat, chapitre: &Chapitre) -> Result<()
         let maintenant = maintenant_ms();
         match reponse {
             Ok((reponse, modele)) => {
-                let bonnes: Vec<_> =
-                    reponse.questions.into_iter().filter_map(|q| questions::preparer(q, &lot.extraits).ok()).collect();
+                let bonnes: Vec<_> = reponse
+                    .questions
+                    .into_iter()
+                    .filter(garder)
+                    .filter_map(|q| questions::preparer(q, &lot.extraits).ok())
+                    .collect();
                 let mut par_note: HashMap<String, usize> = HashMap::new();
                 for q in &bonnes {
                     if let Some(e) = extrait_cite(&lot.extraits, &q.source, &q.citation) {
@@ -608,6 +627,16 @@ mod tests {
             texte: "x".repeat(taille),
             markdown: String::new(),
         }
+    }
+
+    #[test]
+    fn questions_de_vocabulaire_reperees() {
+        assert!(est_question_de_vocabulaire("Que signifie « die Überfahrt » ?"));
+        assert!(est_question_de_vocabulaire("Comment dit-on « bien que » en allemand ?"));
+        assert!(est_question_de_vocabulaire("Traduisez : « Ils ont fui la guerre. »"));
+        assert!(!est_question_de_vocabulaire("Pourquoi les Allemands ont-ils émigré vers l'Amérique ?"));
+        assert!(consigne(4, &[], true).contains("JAMAIS de carte de vocabulaire"));
+        assert!(!consigne(4, &[], false).contains("vocabulaire"));
     }
 
     #[test]

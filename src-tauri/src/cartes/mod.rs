@@ -68,6 +68,9 @@ pub fn cartes_de_note(note: &NoteSource, sections: &[SectionSource]) -> Vec<Cart
     } else if trous::est_source(note) {
         cartes.extend(trous::cartes(note, sections));
     }
+    if vocabulaire::est_cours_de_langue(note) {
+        cartes.extend(vocabulaire::cartes_de_cours(note, sections));
+    }
     if ordre::est_source(note) {
         cartes.extend(ordre::cartes(note, sections));
     }

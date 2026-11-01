@@ -36,10 +36,31 @@ pub fn langue(note: &NoteSource) -> (&'static str, &'static str) {
     }
 }
 
+/// Matière où l'on apprend une langue étrangère (ou une DNL enseignée dans cette langue) : le vocabulaire s'y
+/// révise seulement en cartes recto / verso, comme dans Quizlet (demandé le 2026-11-01).
+pub fn matiere_de_langue(matiere: Option<&str>) -> bool {
+    let m = matiere.unwrap_or("").to_lowercase();
+    m.contains("allemand") || m.contains("anglais") || m.contains("dnl")
+}
+
+/// Note de cours d'une langue dont les lignes « mot = traduction » deviennent aussi des cartes recto / verso.
+pub fn est_cours_de_langue(note: &NoteSource) -> bool {
+    !est_source(note) && matiere_de_langue(note.matiere.as_deref())
+}
+
 pub fn cartes(note: &NoteSource, sections: &[SectionSource]) -> Vec<CarteGeneree> {
+    cartes_depuis(note, paires(&note.titre, sections))
+}
+
+/// Cartes du vocabulaire glissé dans une note de cours de langue.
+pub fn cartes_de_cours(note: &NoteSource, sections: &[SectionSource]) -> Vec<CarteGeneree> {
+    cartes_depuis(note, paires_de_cours(sections))
+}
+
+fn cartes_depuis(note: &NoteSource, paires: Vec<Paire>) -> Vec<CarteGeneree> {
     let (code, nom) = langue(note);
     let mut cartes = Vec::new();
-    for p in paires(&note.titre, sections) {
+    for p in paires {
         let base = normaliser_cle(&p.etranger);
         for (sens, question, reponse) in [
             ("vers_fr", &p.etranger, &p.francais),
@@ -100,6 +121,66 @@ pub fn paires(titre_note: &str, sections: &[SectionSource]) -> Vec<Paire> {
         }
     }
     paires
+}
+
+/// Paires d'une note de cours, plus prudemment que dans une liste de vocabulaire : seulement les éléments de
+/// liste (`* mot = traduction`) et les lignes qui commencent par le mot en gras ou en italique
+/// (`**die Amtssprache** = la langue officielle ; **die Minderheit** = la minorité`). Les phrases du cours qui
+/// contiennent un « = » au milieu (« L'allemand (die Amtssprache = langue officielle) est… ») sont ignorées.
+pub fn paires_de_cours(sections: &[SectionSource]) -> Vec<Paire> {
+    let mut paires = Vec::new();
+    for s in sections {
+        let mut dans_code = false;
+        for ligne in s.texte.lines() {
+            let l = sans_chevrons(ligne).trim();
+            if l.starts_with("```") {
+                dans_code = !dans_code;
+                continue;
+            }
+            let element = ["* ", "- ", "+ "].iter().find_map(|p| l.strip_prefix(p));
+            let l = element.unwrap_or(l).trim();
+            if dans_code || (element.is_none() && !l.starts_with('*')) || l.contains('$') || l.contains('→') {
+                continue;
+            }
+            // Plusieurs paires sur la ligne, séparées par « ; » : chacune a son « = ».
+            let morceaux = decouper_hors_parentheses(l, ";");
+            let morceaux = if morceaux.len() > 1 && morceaux.iter().all(|m| m.contains(" = ")) { morceaux } else { vec![l] };
+            for m in morceaux {
+                let Some((gauche, droite)) = m.split_once(" = ") else { continue };
+                if gauche.contains(" : ") || droite.contains(" = ") {
+                    continue; // « **Développement** : … (x = y) » : une phrase du cours, pas du vocabulaire
+                }
+                // Point final retiré, mais pas les points de suspension (« pensé que... »).
+                let droite = match droite.strip_suffix('.') {
+                    Some(d) if !d.ends_with('.') => d,
+                    _ => droite,
+                };
+                // Remarque en italique à la fin (« quitter son pays *(attention : haben)* ») : pas à apprendre.
+                let droite = match droite.rfind(" *(") {
+                    Some(i) if droite.ends_with(")*") => &droite[..i],
+                    _ => droite,
+                };
+                let texte = format!("{} = {}", sans_emphase(gauche), sans_emphase(droite));
+                for (e, f) in paires_egal(&texte).unwrap_or_default() {
+                    paires.push(paire(&e, &f, &s.titre, l));
+                }
+            }
+        }
+    }
+    paires
+}
+
+/// `**mot**` ou `*expression*` → le texte seul. Un astérisque isolé (`verlassen*`, verbe fort) est gardé.
+fn sans_emphase(texte: &str) -> &str {
+    let t = texte.trim();
+    for marque in ["**", "*", "_"] {
+        if let Some(sans) = t.strip_prefix(marque).and_then(|x| x.strip_suffix(marque)) {
+            if !sans.is_empty() && !sans.contains(marque) {
+                return sans.trim();
+            }
+        }
+    }
+    t
 }
 
 fn paire(etranger: &str, francais: &str, section: &str, ligne: &str) -> Paire {
@@ -233,6 +314,45 @@ mod tests {
                 ("bestimmt, sicher(lich)".into(), "sûrement".into()),
             ]
         );
+    }
+
+    #[test]
+    fn vocabulaire_glisse_dans_un_cours() {
+        let p: Vec<(String, String)> = paires_de_cours(&[section(
+            "> **die Amtssprache** = la langue officielle ; **die Minderheit** = la minorité.\n\
+             > **Deutschland: ein Auswanderungsland** = l'Allemagne, un pays d'émigration.\n\
+             > * *Ich hätte nie gedacht, dass...* = je n'aurais jamais pensé que...\n\
+             > * die Heimat verlassen* = quitter son pays *(attention : haben)*\n\
+             > * aus/wandern ≠ ein/wandern = émigrer ≠ immigrer\n\
+             L'allemand (die Amtssprache = langue officielle) est langue officielle dans 6 pays.\n\
+             > * **Raisons économiques** (aus Gründen) : Sie fanden keine Arbeit = ils ne trouvaient pas de travail\n\
+             > * **Développement** : connecteurs (*einerseits* = d'une part)\n\
+             >   → \"on parle allemand\" = *dass Deutsch gesprochen wird.*\n\
+             > * $E = mc^2$",
+        )])
+        .into_iter()
+        .map(|p| (p.etranger, p.francais))
+        .collect();
+        assert_eq!(
+            p,
+            vec![
+                ("die Amtssprache".into(), "la langue officielle".into()),
+                ("die Minderheit".into(), "la minorité".into()),
+                ("Deutschland: ein Auswanderungsland".into(), "l'Allemagne, un pays d'émigration".into()),
+                ("Ich hätte nie gedacht, dass...".into(), "je n'aurais jamais pensé que...".into()),
+                ("die Heimat verlassen*".into(), "quitter son pays".into()),
+                ("aus/wandern".into(), "émigrer".into()),
+                ("ein/wandern".into(), "immigrer".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn matieres_de_langue() {
+        assert!(matiere_de_langue(Some("Allemand")));
+        assert!(matiere_de_langue(Some("DNL histoire géo")));
+        assert!(!matiere_de_langue(Some("Spé SVT")));
+        assert!(!matiere_de_langue(None));
     }
 
     #[test]
