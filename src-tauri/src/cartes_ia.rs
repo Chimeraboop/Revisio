@@ -22,10 +22,12 @@ use crate::{ia, maintenant_ms, Etat};
 /// Genres de notes qui reçoivent des cartes (le vocabulaire a les siennes, sans IA).
 pub const GENRES_DE_COURS: [&str; 5] = ["cours", "fiche_synthese", "methodologie", "reference", "etude_lineaire"];
 /// Extraits envoyés en un appel : assez petit pour que l'IA couvre tout le texte.
-const CARACTERES_PAR_LOT: usize = 7_000;
+const CARACTERES_PAR_LOT: usize = 4_500;
 /// Une carte pour environ 250 caractères de cours (350 laissait de côté la moitié des notions, essai du 01/11).
 const CARACTERES_PAR_CARTE: usize = 250;
-const CARTES_PAR_LOT: usize = 30;
+/// Au-delà d'une vingtaine de cartes par appel, Gemini répond parfois « Request contains an invalid argument »
+/// au bout de 2 à 3 minutes (constaté le 01/11 avec 28 cartes).
+const CARTES_PAR_LOT: usize = 18;
 /// En dessous, la note est laissée telle quelle (ses anciennes cartes restent).
 const TAILLE_MINIMALE: usize = 150;
 /// Une note qui échoue est réessayée une heure plus tard, trois fois au plus (ensuite : bouton « Réessayer »).
@@ -185,7 +187,7 @@ pub struct Lot {
     pub finies: Vec<(String, usize)>,
 }
 
-/// Regroupe les notes d'un chapitre en lots d'au plus ~7 000 caractères. Une note n'est coupée que si elle
+/// Regroupe les notes d'un chapitre en lots d'au plus ~4 500 caractères. Une note n'est coupée que si elle
 /// est trop longue à elle seule ; ses cartes sont alors réparties sur ses morceaux.
 pub fn lots(notes: &[(NoteAFaire, Vec<Extrait>)]) -> Vec<Lot> {
     let mut lots: Vec<Lot> = Vec::new();
@@ -491,7 +493,10 @@ async fn traiter(app: &AppHandle, etat: &Etat, chapitre: &Chapitre) -> Result<()
         let deja = questions::deja_posees(&conn, &chapitre.matiere, chapitre.chapitre.as_deref()).unwrap_or_default();
         (notes, deja)
     };
-    let modele = etat.reglages.lock().unwrap().modele_ia.clone();
+    // Modèle rapide : le modèle principal n'a que 20 appels par jour en gratuit (gemini-3.8-flash, constaté le
+    // 01/11), souvent surchargé (1 à 4 min par lot) ; flash-lite fait un lot de 18 cartes valides en 13 s. Le quota
+    // du modèle principal reste ainsi pour l'Atelier, les photos et la discussion.
+    let modele = etat.reglages.lock().unwrap().modele_ia_rapide.clone();
     // L'IA locale seulement si l'élève l'a choisie pour tout (pas en secours : des heures de calcul en silence).
     let local = etat.config_locale().filter(|l| l.mode == ia::ModeLocal::Toujours);
     for lot in lots(&notes) {
@@ -641,22 +646,22 @@ mod tests {
 
     #[test]
     fn lots_sans_couper_les_notes() {
-        let a = note("A.md", "C", 3_000, 0);
-        let b = note("B.md", "C", 3_500, 0);
-        let longue = note("L.md", "C", 15_000, 0);
+        let a = note("A.md", "C", 2_000, 0);
+        let b = note("B.md", "C", 2_000, 0);
+        let longue = note("L.md", "C", 9_000, 0);
         let notes = vec![
-            (a.clone(), vec![extrait("A.md", 2_000), extrait("A.md", 1_000)]),
-            (b.clone(), vec![extrait("B.md", 3_500)]),
-            (longue.clone(), (0..5).map(|_| extrait("L.md", 3_000)).collect()),
+            (a.clone(), vec![extrait("A.md", 1_200), extrait("A.md", 800)]),
+            (b.clone(), vec![extrait("B.md", 2_000)]),
+            (longue.clone(), (0..3).map(|_| extrait("L.md", 3_000)).collect()),
         ];
         let l = lots(&notes);
-        // A + B (6 500) ; L coupée en 3 morceaux (6 000, 6 000, 3 000).
+        // A + B (4 000) ; L coupée en 3 morceaux de 3 000.
         assert_eq!(l.len(), 4);
-        assert_eq!(l[0].finies, vec![("A.md".to_string(), 3_000), ("B.md".to_string(), 3_500)]);
-        assert_eq!(l[0].nombre, 12 + 14);
+        assert_eq!(l[0].finies, vec![("A.md".to_string(), 2_000), ("B.md".to_string(), 2_000)]);
+        assert_eq!(l[0].nombre, 8 + 8);
         assert!(l[1].finies.is_empty() && l[2].finies.is_empty());
-        assert_eq!(l[3].finies, vec![("L.md".to_string(), 15_000)]);
-        assert_eq!(l.iter().skip(1).map(|x| x.nombre).sum::<usize>(), 24 + 24 + 12);
+        assert_eq!(l[3].finies, vec![("L.md".to_string(), 9_000)]);
+        assert_eq!(l.iter().skip(1).map(|x| x.nombre).collect::<Vec<_>>(), [12, 12, 12]);
         // Identifiants renumérotés dans chaque lot.
         assert_eq!(l[0].extraits.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["E1", "E2", "E3"]);
         // Une note allongée : seulement les cartes de la partie nouvelle.
