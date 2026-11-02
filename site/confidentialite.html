@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Révisio — confidentialité</title>
+  <meta name="description" content="Règles de confidentialité de Révisio : tes notes et ta progression restent sur tes appareils et dans ton propre Google Drive.">
+  <link rel="icon" href="images/logo.png">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try { if (localStorage.getItem("revisio-theme") === "sombre") document.documentElement.dataset.theme = "sombre"; } catch (e) {}
+  </script>
+  <style>
+    .regles { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; line-height: 1.6; }
+    .regles h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 1.5rem 0 0.5rem; }
+    .regles h2 { font-size: 1.25rem; margin: 2.2rem 0 0.6rem; }
+    .regles p, .regles li { color: color-mix(in srgb, var(--noir) 85%, var(--blanc)); }
+    .regles ul { padding-left: 1.2rem; }
+    .regles .date { color: color-mix(in srgb, var(--noir) 55%, var(--blanc)); font-size: 0.95rem; }
+    .regles a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main class="regles">
+    <a class="marque" href="./"><img src="images/logo.png" alt="" width="28" height="28"> <span>Révisio</span></a>
+    <h1>Confidentialité</h1>
+    <p class="date">Dernière mise à jour : 2 novembre 2026</p>
+
+    <p>
+      Révisio est une application de prise de notes et de révision, gratuite et open source, développée par un lycéen.
+      Elle n'a <strong>aucun serveur</strong> : l'auteur ne reçoit, ne stocke et ne voit aucune de tes données.
+    </p>
+
+    <h2>Sur ton ordinateur</h2>
+    <p>
+      Tes notes restent dans le dossier que tu as choisi. Ta progression (cartes, révisions, erreurs), tes réglages et
+      tout ce que Révisio prépare sont rangés sur ton ordinateur, dans le dossier de données de l'application. Ta clé
+      d'API Gemini, si tu en ajoutes une, est gardée dans le coffre à secrets du système (Gestionnaire d'identification
+      Windows ou Trousseau de macOS).
+    </p>
+
+    <h2>Synchronisation avec ton téléphone (Google Drive)</h2>
+    <p>
+      Si tu choisis de connecter ton compte Google, Révisio utilise uniquement l'autorisation
+      <code>drive.appdata</code> : un dossier caché, réservé à Révisio, dans <strong>ton propre</strong> Google Drive.
+    </p>
+    <ul>
+      <li>Révisio n'a accès à <strong>aucun autre fichier</strong> de ton Drive et ne peut ni les lire, ni les modifier.</li>
+      <li>Ce dossier contient tes cartes, ta progression, ton carnet d'erreurs, tes évaluations, les réglages des séances
+        et le texte de tes notes, pour que ton téléphone puisse les afficher et que tes révisions y soient enregistrées.</li>
+      <li>Les échanges se font directement entre tes appareils et Google, sans intermédiaire. L'auteur de Révisio n'y a
+        jamais accès.</li>
+      <li>Le jeton de connexion est gardé dans le coffre à secrets de ton ordinateur et dans le stockage de la web-app
+        sur ton téléphone.</li>
+      <li>Tu peux tout arrêter à tout moment : bouton « Déconnecter » dans les Réglages de Révisio, ou depuis
+        <a href="https://myaccount.google.com/permissions">la page des accès de ton compte Google</a>. Pour effacer le
+        dossier caché, supprime les données de Révisio dans les paramètres de Google Drive (« Gérer les applications »).</li>
+    </ul>
+    <p>
+      L'utilisation des données reçues des API Google respecte les
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">règles relatives aux données utilisateur
+      des services d'API Google</a>, y compris les exigences d'utilisation limitée : elles ne servent qu'à la
+      synchronisation, ne sont transmises à personne et ne servent jamais à la publicité.
+    </p>
+
+    <h2>Intelligence artificielle</h2>
+    <p>
+      Les fonctions d'IA sont facultatives. Quand tu les utilises, le texte de tes notes concernées (et, pour les photos
+      de cours, tes photos) est envoyé au service que tu as choisi : Gemini de Google, avec ta propre clé, une IA locale
+      sur ton ordinateur (Ollama), ou une extension que tu as installée. Les conditions de ces services s'appliquent. Rien
+      n'est envoyé si tu n'utilises pas ces fonctions.
+    </p>
+
+    <h2>Espace web</h2>
+    <p>
+      Les sites que tu ouvres dans l'espace web de Révisio reçoivent ce qu'un navigateur leur envoie habituellement.
+      Révisio n'y ajoute rien.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Une question ? Ouvre un ticket sur
+      <a href="https://github.com/Chimeraboop/Revisio/issues">la page GitHub de Révisio</a>.
+    </p>
+  </main>
+</body>
+</html>
