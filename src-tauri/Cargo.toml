@@ -29,9 +29,11 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 notify-debouncer-full = "0.7.0"
 keyring-core = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
-tokio = { version = "1", features = ["time", "sync", "macros", "process", "io-util"] }
+tokio = { version = "1", features = ["time", "sync", "macros", "process", "io-util", "net"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+sha2 = "0.11.1"
+flate2 = "1"
 
 # Coffre à secrets du système pour la clé Gemini.
 [target.'cfg(windows)'.dependencies]
@@ -48,6 +50,5 @@ panic = "abort"
 strip = true
 
 [dev-dependencies]
-sha2 = "0.11.1"
 tokio = { version = "1", features = ["time", "sync", "macros", "rt", "test-util"] }
 walkdir = "2.5.0"

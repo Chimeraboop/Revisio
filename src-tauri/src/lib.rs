@@ -11,6 +11,7 @@ pub mod cartes_mentales;
 pub mod db;
 pub mod discussion;
 pub mod extensions;
+pub mod google;
 pub mod ecriture;
 pub mod ia;
 pub mod indexer;
@@ -61,6 +62,8 @@ pub struct Etat {
     pub photos: photos::Suivi,
     /// Cartes des cours créées par l'IA en arrière-plan.
     pub cartes_ia: cartes_ia::Suivi,
+    /// Google Drive (synchronisation avec le téléphone).
+    pub google: google::Google,
 }
 
 impl Etat {
@@ -187,6 +190,7 @@ pub fn run() {
             taches: taches::Taches::default(),
             photos: Default::default(),
             cartes_ia: Default::default(),
+            google: Default::default(),
         })
         .setup(|app| {
             {
@@ -201,6 +205,7 @@ pub fn run() {
             }
             photos::demarrer_surveillance(app.handle().clone());
             cartes_ia::demarrer(app.handle().clone());
+            synchro::demarrer(app.handle().clone());
             if app.state::<Etat>().reglages.lock().unwrap().chemin_vault.is_some() {
                 lancer_indexation(app.handle());
                 demarrer_surveillance(app.handle());
@@ -236,6 +241,10 @@ pub fn run() {
             commandes::refuser_proposition,
             commandes::definir_dossier_photos,
             commandes::extensions_installees,
+            commandes::etat_synchro,
+            commandes::connecter_google,
+            commandes::deconnecter_google,
+            commandes::synchroniser_maintenant,
             commandes::definir_extension_photos,
             commandes::compter_photos_dossier,
             commandes::etat_photos,

@@ -666,6 +666,44 @@ pub fn definir_dossier_photos(
     modifier_reglages(&etat, |r| r.dossier_photos = chemin)
 }
 
+/// Synchronisation avec le téléphone (voir `synchro.rs`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EtatSynchro {
+    pub connecte: bool,
+    pub dernier: Option<crate::synchro::Rapport>,
+    pub adresse_app: &'static str,
+}
+
+#[tauri::command]
+pub fn etat_synchro(etat: State<Etat>) -> EtatSynchro {
+    EtatSynchro {
+        connecte: etat.google.connecte(),
+        dernier: crate::synchro::dernier_rapport(&etat.db.lock().unwrap()),
+        adresse_app: crate::synchro::ADRESSE_APP,
+    }
+}
+
+/// Connexion à Google Drive : le navigateur s'ouvre sur la page de Google ; une première
+/// synchronisation suit dès que l'élève a accepté.
+#[tauri::command]
+pub async fn connecter_google(app: AppHandle, etat: State<'_, Etat>) -> Result<crate::synchro::Rapport, String> {
+    etat.google
+        .connecter(|url| app.opener().open_url(url, None::<&str>).map_err(|e| format!("Impossible d'ouvrir le navigateur : {e}")))
+        .await?;
+    crate::synchro::synchroniser(&etat).await
+}
+
+#[tauri::command]
+pub async fn deconnecter_google(etat: State<'_, Etat>) -> Result<(), String> {
+    etat.google.deconnecter().await
+}
+
+#[tauri::command]
+pub async fn synchroniser_maintenant(etat: State<'_, Etat>) -> Result<crate::synchro::Rapport, String> {
+    crate::synchro::synchroniser(&etat).await
+}
+
 /// Extensions installées dans le dossier `extensions` des données (voir `extensions.rs`).
 #[tauri::command]
 pub fn extensions_installees(etat: State<Etat>) -> Vec<crate::extensions::Extension> {

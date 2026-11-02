@@ -494,9 +494,178 @@ pub fn importer(conn: &mut Connection, journal: &Journal, ecriture: Option<&ecri
     Ok(bilan)
 }
 
+// ---------- Échange avec Google Drive ----------
+
+/// Adresse de la web-app à ouvrir sur le téléphone.
+pub const ADRESSE_APP: &str = "https://chimeraboop.github.io/Revisio/app/";
+/// Synchronisation automatique, tant que Révisio est ouvert et Google Drive connecté.
+const INTERVALLE: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Lance la synchronisation automatique (au démarrage, puis toutes les 5 minutes). Chaque compte rendu
+/// est envoyé à l'interface (évènement « synchro »).
+pub fn demarrer(app: tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        loop {
+            let etat = app.state::<crate::Etat>();
+            if etat.google.connecte() {
+                match synchroniser(etat.inner()).await {
+                    Ok(r) => {
+                        let _ = app.emit("synchro", r);
+                    }
+                    Err(_) => {
+                        let _ = app.emit("synchro", dernier_rapport(&etat.db.lock().unwrap()));
+                    }
+                }
+            }
+            tokio::time::sleep(INTERVALLE).await;
+        }
+    });
+}
+
+/// Nom du fichier publié par le PC dans le dossier caché de Révisio.
+pub const FICHIER_CONTENU: &str = "contenu.json.gz";
+/// Journaux des autres appareils : `journal-<appareil>.json.gz`.
+const PREFIXE_JOURNAL: &str = "journal-";
+
+pub fn compresser(octets: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    let _ = e.write_all(octets);
+    e.finish().unwrap_or_default()
+}
+
+pub fn decompresser(octets: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut sortie = Vec::new();
+    flate2::read::GzDecoder::new(octets)
+        .read_to_end(&mut sortie)
+        .map_err(|e| format!("Fichier de synchronisation abîmé : {e}"))?;
+    Ok(sortie)
+}
+
+/// Compte rendu d'une synchronisation (gardé pour l'écran des Réglages).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Rapport {
+    pub date: i64,
+    /// Journaux d'autres appareils lus (nouveaux depuis la dernière fois).
+    pub journaux: usize,
+    pub revisions: usize,
+    pub etats: usize,
+    pub erreurs: usize,
+    pub notes_ecrites: usize,
+    pub notes_a_valider: usize,
+    pub notes_en_attente: usize,
+    /// Le contenu du PC a été envoyé (il avait changé).
+    pub envoye: bool,
+    /// Taille du contenu compressé, en octets.
+    pub taille: usize,
+    pub erreur: Option<String>,
+}
+
+pub fn dernier_rapport(conn: &Connection) -> Option<Rapport> {
+    db::lire_meta(conn, "synchro_rapport").and_then(|t| serde_json::from_str(&t).ok())
+}
+
+/// Une synchronisation complète : fusion des journaux des autres appareils, puis envoi du contenu du PC
+/// s'il a changé. Le compte rendu (ou l'erreur) est gardé dans la base.
+pub async fn synchroniser(etat: &crate::Etat) -> Result<Rapport, String> {
+    let Ok(_verrou) = etat.google.verrou.try_lock() else {
+        return Err("Une synchronisation est déjà en cours.".into());
+    };
+    let resultat = synchroniser_(etat).await;
+    let rapport = match &resultat {
+        Ok(r) => r.clone(),
+        Err(e) => Rapport { date: crate::maintenant_ms(), erreur: Some(e.clone()), ..Default::default() },
+    };
+    if let Ok(t) = serde_json::to_string(&rapport) {
+        let _ = db::ecrire_meta(&etat.db.lock().unwrap(), "synchro_rapport", &t);
+    }
+    resultat
+}
+
+async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
+    let fichiers = etat.google.lister().await?;
+    let moi = appareil(&etat.db.lock().unwrap());
+    let mut rapport = Rapport { date: crate::maintenant_ms(), ..Default::default() };
+
+    // 1. Journaux des autres appareils, s'ils ont changé depuis la dernière lecture.
+    for f in fichiers.iter().filter(|f| f.name.starts_with(PREFIXE_JOURNAL) && f.name.ends_with(".json.gz")) {
+        let vu = format!("synchro_vu:{}", f.id);
+        if db::lire_meta(&etat.db.lock().unwrap(), &vu).as_deref() == Some(f.modified_time.as_str()) {
+            continue;
+        }
+        let octets = decompresser(&etat.google.telecharger(&f.id).await?)?;
+        let journal: Journal = serde_json::from_slice(&octets).map_err(|e| format!("Journal de {} illisible : {e}", f.name))?;
+        if journal.appareil == moi {
+            continue;
+        }
+        let reglages = etat.reglages.lock().unwrap().clone();
+        let racine = reglages.vault();
+        let ctx = racine.as_deref().map(|r| ecriture::Contexte {
+            racine: r,
+            autorisee: reglages.ecriture_autorisee,
+            origine: "appareil",
+            lot_id: None,
+            raison: Some("Modifiée sur le téléphone"),
+            maintenant: crate::maintenant_ms(),
+            groupe: None,
+        });
+        let bilan = importer(&mut etat.db.lock().unwrap(), &journal, ctx.as_ref())?;
+        rapport.journaux += 1;
+        rapport.revisions += bilan.revisions;
+        rapport.etats += bilan.etats;
+        rapport.erreurs += bilan.erreurs;
+        rapport.notes_ecrites += bilan.notes_ecrites;
+        rapport.notes_a_valider += bilan.notes_a_valider;
+        rapport.notes_en_attente += bilan.notes_en_attente;
+        // Des notes attendent l'autorisation d'écrire : le journal sera relu la prochaine fois.
+        if bilan.notes_en_attente == 0 {
+            let _ = db::ecrire_meta(&etat.db.lock().unwrap(), &vu, &f.modified_time);
+        }
+    }
+
+    // 2. Contenu du PC, envoyé seulement s'il a changé depuis le dernier envoi.
+    let octets = {
+        let reglages = etat.reglages.lock().unwrap().clone();
+        let conn = etat.db.lock().unwrap();
+        let mut contenu = exporter(&conn, &reglages, reglages.vault().as_deref(), rapport.date)?;
+        // La signature ne tient pas compte de l'heure de génération.
+        contenu.genere_le = 0;
+        let signature = empreinte(&serde_json::to_vec(&contenu).map_err(|e| e.to_string())?);
+        let existant = fichiers.iter().any(|f| f.name == FICHIER_CONTENU);
+        if existant && db::lire_meta(&conn, "synchro_contenu").as_deref() == Some(signature.as_str()) {
+            None
+        } else {
+            contenu.genere_le = rapport.date;
+            let json = serde_json::to_vec(&contenu).map_err(|e| e.to_string())?;
+            Some((compresser(&json), signature))
+        }
+    };
+    if let Some((gz, signature)) = octets {
+        rapport.taille = gz.len();
+        let existant = fichiers.iter().find(|f| f.name == FICHIER_CONTENU).map(|f| f.id.clone());
+        etat.google.envoyer(FICHIER_CONTENU, existant.as_deref(), gz).await?;
+        let _ = db::ecrire_meta(&etat.db.lock().unwrap(), "synchro_contenu", &signature);
+        rapport.envoye = true;
+    }
+    Ok(rapport)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compression_aller_retour() {
+        let texte = "Révisio ".repeat(1000);
+        let gz = compresser(texte.as_bytes());
+        assert!(gz.len() < texte.len() / 10);
+        assert_eq!(decompresser(&gz).unwrap(), texte.as_bytes());
+        assert!(decompresser(b"pas du gzip").is_err());
+    }
 
     fn base() -> Connection {
         let conn = db::ouvrir_en_memoire().unwrap();

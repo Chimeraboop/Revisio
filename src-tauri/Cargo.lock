@@ -3178,6 +3178,7 @@ dependencies = [
  "apple-native-keyring-store",
  "base64 0.22.1",
  "chrono",
+ "flate2",
  "image",
  "keyring-core",
  "notify-debouncer-full",

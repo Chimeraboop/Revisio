@@ -6,6 +6,7 @@ import CartesApprises from "./CartesApprises";
 import ReglagesIaVue from "./ReglagesIaVue";
 import ReglagesLocauxVue from "./ReglagesLocauxVue";
 import ReglagesEcritureVue from "./ReglagesEcritureVue";
+import ReglagesSynchroVue from "./ReglagesSynchroVue";
 import ChoixVault from "./ChoixVault";
 import { useState } from "react";
 import { NOM_SYSTEME } from "../lib/plateforme";
@@ -60,7 +61,7 @@ export default function ReglagesVue({ reglages, infos, onChange }: Props) {
       <EntetePage
         icone={Settings}
         titre="Réglages"
-        description="Ton dossier de notes, l'apparence, les séances de révision et l'intelligence artificielle."
+        description="Ton dossier de notes, ton téléphone, l'apparence, les séances de révision et l'intelligence artificielle."
       />
 
       <section className="carte bloc">
@@ -71,6 +72,8 @@ export default function ReglagesVue({ reglages, infos, onChange }: Props) {
       </section>
 
       <ReglagesEcritureVue reglages={reglages} onChange={onChange} />
+
+      <ReglagesSynchroVue />
 
       <section className="carte bloc">
         <h2 className="titre-bloc">

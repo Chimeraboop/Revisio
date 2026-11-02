@@ -94,6 +94,28 @@ export interface LotPhotos {
   modele: string | null;
 }
 
+/** Compte rendu d'une synchronisation avec le téléphone. */
+export interface RapportSynchro {
+  date: number;
+  journaux: number;
+  revisions: number;
+  etats: number;
+  erreurs: number;
+  notesEcrites: number;
+  notesAValider: number;
+  notesEnAttente: number;
+  envoye: boolean;
+  taille: number;
+  erreur: string | null;
+}
+
+export interface EtatSynchro {
+  connecte: boolean;
+  dernier: RapportSynchro | null;
+  /** Adresse de la web-app à ouvrir sur le téléphone. */
+  adresseApp: string;
+}
+
 /** Extension installée à côté de Révisio (dossier « extensions » des données). */
 export interface Extension {
   id: string;
@@ -128,7 +150,7 @@ export interface EntreeHistorique {
   date: number;
   chemin: string;
   genre: "creation" | "modification" | "dossier" | "deplacement" | "suppression" | "suppression_dossier";
-  origine: "manuel" | "photos" | "discussion";
+  origine: "manuel" | "photos" | "discussion" | "appareil";
   lotId: number | null;
   raison: string | null;
   annuleeLe: number | null;
@@ -844,6 +866,10 @@ export const api = {
   compterPhotosDossier: (chemin: string) => invoke<number>("compter_photos_dossier", { chemin }),
   etatPhotos: () => invoke<EtatSurveillancePhotos>("etat_photos"),
   extensionsInstallees: () => invoke<Extension[]>("extensions_installees"),
+  etatSynchro: () => invoke<EtatSynchro>("etat_synchro"),
+  connecterGoogle: () => invoke<RapportSynchro>("connecter_google"),
+  deconnecterGoogle: () => invoke<void>("deconnecter_google"),
+  synchroniserMaintenant: () => invoke<RapportSynchro>("synchroniser_maintenant"),
   definirExtensionPhotos: (id: string | null) => invoke<Reglages>("definir_extension_photos", { id }),
   dossiersDrive: () => invoke<string[]>("dossiers_drive"),
   definirTheme: (theme: Theme) => invoke<Reglages>("definir_theme", { theme }),
