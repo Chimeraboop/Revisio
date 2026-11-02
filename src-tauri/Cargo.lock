@@ -3173,7 +3173,7 @@ dependencies = [
 
 [[package]]
 name = "revisio"
-version = "0.13.2"
+version = "0.14.0"
 dependencies = [
  "apple-native-keyring-store",
  "base64 0.22.1",
