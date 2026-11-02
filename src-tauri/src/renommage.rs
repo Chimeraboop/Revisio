@@ -41,6 +41,15 @@ pub fn migrer_chemins(conn: &Connection, ancien: &str, nouveau: &str) -> rusqlit
         );
         if ok.is_err() {
             conn.execute("UPDATE cartes SET note_chemin = ?2 WHERE id = ?1", params![id, nouveau_chemin])?;
+        } else if nouvelle_cle != cle {
+            // Un autre appareil peut encore envoyer des révisions sous l'ancienne clé (voir synchro.rs).
+            conn.execute("UPDATE cles_renommees SET nouvelle = ?2 WHERE nouvelle = ?1", params![cle, nouvelle_cle])?;
+            conn.execute(
+                "INSERT INTO cles_renommees(ancienne, nouvelle, date) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(ancienne) DO UPDATE SET nouvelle = excluded.nouvelle, date = excluded.date",
+                params![cle, nouvelle_cle, crate::maintenant_ms()],
+            )?;
+            conn.execute("DELETE FROM cles_renommees WHERE ancienne = nouvelle", [])?;
         }
     }
     // Carnet d'erreurs, propositions de l'IA, historique (pour pouvoir encore annuler après un renommage).

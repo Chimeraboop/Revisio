@@ -360,8 +360,8 @@ pub fn marquer_apprises(conn: &mut Connection, maintenant: i64) -> rusqlite::Res
         });
         // introduite_le = 0 : ces cartes ne comptent pas dans le quota de nouvelles cartes.
         tx.execute(
-            "UPDATE cartes SET etat_fsrs = ?2, echeance = ?3, introduite_le = 0 WHERE id = ?1",
-            params![id, etat.to_string(), echeance],
+            "UPDATE cartes SET etat_fsrs = ?2, echeance = ?3, introduite_le = 0, etat_maj = ?4 WHERE id = ?1",
+            params![id, etat.to_string(), echeance, maintenant],
         )?;
     }
     tx.commit()?;
@@ -497,7 +497,8 @@ pub fn enregistrer(conn: &mut Connection, r: &NouvelleRevision, maintenant: i64)
     .map_err(|e| e.to_string())?;
     let modifiees = tx
         .execute(
-            "UPDATE cartes SET etat_fsrs = ?2, echeance = ?3, introduite_le = coalesce(introduite_le, ?4) WHERE id = ?1",
+            "UPDATE cartes SET etat_fsrs = ?2, echeance = ?3, introduite_le = coalesce(introduite_le, ?4), etat_maj = ?4
+             WHERE id = ?1",
             params![r.carte_id, r.etat_fsrs, r.echeance, maintenant],
         )
         .map_err(|e| e.to_string())?;
@@ -689,7 +690,7 @@ pub fn erreurs(conn: &Connection, matiere: Option<&str>, avec_comprises: bool) -
 /// « J'ai compris » : toutes les erreurs de la même carte sont marquées.
 pub fn marquer_comprise(conn: &Connection, erreur_id: i64, comprise: bool) -> rusqlite::Result<usize> {
     conn.execute(
-        "UPDATE erreurs SET comprise = ?2
+        "UPDATE erreurs SET comprise = ?2, comprise_le = CAST(unixepoch('subsec') * 1000 AS INTEGER)
          WHERE id = ?1 OR (carte_id IS NOT NULL AND carte_id = (SELECT carte_id FROM erreurs WHERE id = ?1))",
         params![erreur_id, comprise],
     )

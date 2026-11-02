@@ -374,6 +374,28 @@ const MIGRATIONS: &[&str] = &[
         maj     INTEGER NOT NULL
     );
     "#,
+    // 16 — synchronisation avec d'autres appareils (téléphone) : identifiants uniques des révisions et des
+    // erreurs, date du dernier changement d'état de chaque carte, anciennes clés des cartes (renommages),
+    // modifications de notes venues d'un autre appareil déjà traitées.
+    r#"
+    ALTER TABLE revisions ADD COLUMN uid TEXT;
+    CREATE UNIQUE INDEX revisions_uid ON revisions(uid);
+    ALTER TABLE erreurs ADD COLUMN uid TEXT;
+    CREATE UNIQUE INDEX erreurs_uid ON erreurs(uid);
+    ALTER TABLE erreurs ADD COLUMN comprise_le INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE cartes ADD COLUMN etat_maj INTEGER NOT NULL DEFAULT 0;
+    UPDATE cartes SET etat_maj = coalesce((SELECT max(date) FROM revisions r WHERE r.carte_id = cartes.id), introduite_le, 0)
+     WHERE etat_fsrs IS NOT NULL;
+    CREATE TABLE cles_renommees (
+        ancienne TEXT PRIMARY KEY,
+        nouvelle TEXT NOT NULL,
+        date     INTEGER NOT NULL
+    );
+    CREATE TABLE synchro_appliques (
+        id   TEXT PRIMARY KEY,               -- appareil|chemin|date d'une note modifiée ailleurs
+        date INTEGER NOT NULL
+    );
+    "#,
 ];
 
 pub fn lire_meta(conn: &Connection, cle: &str) -> Option<String> {
