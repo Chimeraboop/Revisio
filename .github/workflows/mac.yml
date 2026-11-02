@@ -47,6 +47,10 @@ jobs:
           cd src-tauri && cargo test
 
       - name: Fabrication de l'app (puces Apple et Intel)
+        # Code du client Google (synchronisation avec le téléphone), gardé dans les secrets du dépôt.
+        # Sans lui, l'app est fabriquée sans la synchronisation.
+        env:
+          REVISIO_GOOGLE_SECRET: ${{ secrets.REVISIO_GOOGLE_SECRET }}
         run: npx tauri build --target universal-apple-darwin --bundles app,dmg
 
       - name: Nom du fichier

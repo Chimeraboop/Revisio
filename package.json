@@ -10,7 +10,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:mobile": "vite build -c vite.mobile.config.ts",
+    "dev:mobile": "vite -c vite.mobile.config.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",

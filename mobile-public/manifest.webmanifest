@@ -1,0 +1,15 @@
+{
+  "name": "Révisio",
+  "short_name": "Révisio",
+  "description": "Révise tes cartes et lis tes notes, même sans Internet.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
+  "icons": [
+    { "src": "icone-256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -687,6 +687,24 @@ async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
 mod tests {
     use super::*;
 
+    /// Essai lancé à la main : un journal produit par la web-app (REVISIO_ESSAI_JOURNAL) fusionné dans une
+    /// copie de base (REVISIO_ESSAI_DB). `cargo test -- --ignored essai_journal_web --nocapture`
+    #[test]
+    #[ignore]
+    fn essai_journal_web() {
+        let journal: Journal =
+            serde_json::from_str(&std::fs::read_to_string(std::env::var("REVISIO_ESSAI_JOURNAL").unwrap()).unwrap()).unwrap();
+        let mut conn = Connection::open(std::env::var("REVISIO_ESSAI_DB").unwrap()).unwrap();
+        let bilan = importer(&mut conn, &journal, None).unwrap();
+        println!("{bilan:?}");
+        for r in &journal.revisions {
+            let (etat, maj): (Option<String>, i64) = conn
+                .query_row("SELECT etat_fsrs, etat_maj FROM cartes WHERE cle = ?1", [&r.cle], |l| Ok((l.get(0)?, l.get(1)?)))
+                .unwrap();
+            println!("{} -> maj {maj}, état {}", r.cle, etat.unwrap_or_default().chars().take(60).collect::<String>());
+        }
+    }
+
     #[test]
     fn compression_aller_retour() {
         let texte = "Révisio ".repeat(1000);

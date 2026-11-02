@@ -1,0 +1,240 @@
+/* Révisio sur téléphone : barre du haut, contenu qui défile, onglets en bas (zones sûres de l'iPhone respectées). */
+
+html,
+body {
+  background: var(--fond);
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+.mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.mobile-barre {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  border-bottom: 1px solid var(--bordure);
+  background: var(--fond-panneau);
+}
+
+.mobile-barre .marque {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  margin-right: auto;
+}
+
+.mobile-contenu {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-onglets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--bordure);
+  background: var(--fond-panneau);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-onglets button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--texte-doux);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.mobile-onglets button.actif {
+  color: var(--texte);
+  font-weight: 600;
+}
+
+/* Les écrans de l'app de bureau, resserrés pour un téléphone. */
+.mobile .page {
+  max-width: none;
+  padding: 16px 16px 32px;
+}
+
+.mobile .entete-page {
+  gap: 12px;
+}
+
+.mobile .entete-page h1 {
+  font-size: 1.5rem;
+}
+
+.mobile .rangee {
+  flex-wrap: wrap;
+}
+
+.mobile button,
+.mobile .bouton {
+  min-height: 40px;
+}
+
+.mobile .lecteur-note {
+  padding: 0 16px 32px;
+  max-width: none;
+}
+
+.mobile pre,
+.mobile table {
+  max-width: 100%;
+  overflow-x: auto;
+  display: block;
+}
+
+.mobile img,
+.mobile svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Premier lancement */
+.mobile-accueil {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 48px) 20px 40px;
+  line-height: 1.5;
+}
+
+.mobile-accueil h1 {
+  margin: 12px 0 8px;
+}
+
+.mobile-accueil ol {
+  padding-left: 1.2rem;
+}
+
+.mobile-accueil .bouton {
+  width: 100%;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.mobile-chargement {
+  padding: 40vh 20px 0;
+  text-align: center;
+}
+
+/* Notes */
+.notes-mobile {
+  padding: 12px 0 24px;
+}
+
+.retour-mobile {
+  margin: 0 16px 8px;
+}
+
+.recherche-mobile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 0 12px;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-petit);
+  background: var(--fond-panneau);
+}
+
+.recherche-mobile input {
+  flex: 1;
+  border: 0;
+  background: none;
+  font: inherit;
+  padding: 10px 0;
+  color: var(--texte);
+  outline: none;
+}
+
+.liste-notes-mobile,
+.liste-notes-mobile ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.liste-notes-mobile ul {
+  padding-left: 18px;
+}
+
+.liste-notes-mobile button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--bordure);
+  background: none;
+  color: var(--texte);
+  font: inherit;
+  text-align: left;
+}
+
+.liste-notes-mobile .groupe-mobile {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.liste-notes-mobile .tourne {
+  transform: rotate(90deg);
+}
+
+/* Séances du jour : icône et texte, puis le bouton sur toute la largeur. */
+.mobile .seance-du-jour {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.mobile .seance-du-jour > div:not(.seance-icone) {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.mobile .seance-du-jour > .bouton {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+/* Éditeur de notes : en-tête sur deux lignes, « écrire et voir » l'un sous l'autre. */
+.mobile .entete-edition {
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+
+.mobile .entete-edition-titre {
+  flex: 1 1 100%;
+}
+
+.mobile .barre-editeur {
+  flex-wrap: wrap;
+}
+
+.mobile .editeur-corps.vue-les-deux {
+  grid-template-columns: 1fr;
+  grid-auto-rows: minmax(40vh, auto);
+}
+
+.mobile .lecteur-edition {
+  min-height: calc(100dvh - 160px);
+}

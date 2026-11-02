@@ -402,6 +402,9 @@ mod tests {
             let json = crate::synchro::decompresser(&g.telecharger(&f.id).await.unwrap()).unwrap();
             let c: crate::synchro::Contenu = serde_json::from_slice(&json).unwrap();
             println!("contenu : {} cartes, {} révisions, {} erreurs, {} notes", c.cartes.len(), c.revisions.len(), c.erreurs.len(), c.notes.len());
+            if let Ok(sortie) = std::env::var("REVISIO_ESSAI_SORTIE") {
+                std::fs::write(sortie, &json).unwrap();
+            }
         }
         match std::env::var("REVISIO_ESSAI").as_deref() {
             Ok("deposer") => {
