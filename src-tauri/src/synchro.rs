@@ -71,6 +71,9 @@ pub struct Contenu {
     pub erreurs: Vec<ErreurSynchro>,
     pub evaluations: Vec<planning::Evaluation>,
     pub notes: Vec<NoteSynchro>,
+    /// Modifications de notes venues d'autres appareils déjà traitées (écrites ou proposées) :
+    /// `appareil|chemin|date`. Le téléphone peut les oublier.
+    pub notes_traitees: Vec<String>,
 }
 
 /// Réglages utiles aux séances sur le téléphone.
@@ -167,10 +170,14 @@ pub struct ErreurSynchro {
 #[serde(rename_all = "camelCase")]
 pub struct NoteSynchro {
     pub chemin: String,
+    /// Nom du fichier sans « .md » (sert à résoudre les [[liens]]).
+    pub nom: String,
     pub titre: String,
     pub matiere: Option<String>,
     pub chapitre: Option<String>,
     pub genre: String,
+    pub tags: Vec<String>,
+    pub frontmatter: Value,
     pub contenu: String,
     /// Empreinte du fichier : le téléphone la renvoie avec une note modifiée.
     pub empreinte: String,
@@ -268,20 +275,35 @@ pub fn exporter(conn: &Connection, reglages: &Reglages, racine: Option<&Path>, m
 
     let mut notes = Vec::new();
     if let Some(racine) = racine {
-        let liste: Vec<(String, String, Option<String>, Option<String>, String)> = conn
-            .prepare("SELECT chemin, titre, matiere, chapitre, genre FROM notes WHERE genre != 'schema' ORDER BY chemin")
+        type Ligne = (String, String, String, Option<String>, Option<String>, String, String, String);
+        let liste: Vec<Ligne> = conn
+            .prepare(
+                "SELECT chemin, nom, titre, matiere, chapitre, genre, tags, frontmatter FROM notes
+                 WHERE genre != 'schema' ORDER BY chemin",
+            )
             .map_err(e)?
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)))
             .map_err(e)?
             .collect::<rusqlite::Result<_>>()
             .map_err(e)?;
-        for (chemin, titre, matiere, chapitre, genre) in liste {
+        for (chemin, nom, titre, matiere, chapitre, genre, tags, frontmatter) in liste {
             let Ok(octets) = vault::lire_octets(racine, &chemin) else { continue };
             if octets.len() > TAILLE_MAX_NOTE {
                 continue;
             }
             let Ok(contenu) = String::from_utf8(octets.clone()) else { continue };
-            notes.push(NoteSynchro { chemin, titre, matiere, chapitre, genre, contenu, empreinte: empreinte(&octets) });
+            notes.push(NoteSynchro {
+                chemin,
+                nom,
+                titre,
+                matiere,
+                chapitre,
+                genre,
+                tags: serde_json::from_str(&tags).unwrap_or_default(),
+                frontmatter: serde_json::from_str(&frontmatter).unwrap_or(Value::Null),
+                contenu,
+                empreinte: empreinte(&octets),
+            });
         }
     }
 
@@ -295,6 +317,13 @@ pub fn exporter(conn: &Connection, reglages: &Reglages, racine: Option<&Path>, m
         erreurs,
         evaluations: planning::lister(conn, "0000-01-01").map_err(e)?,
         notes,
+        notes_traitees: conn
+            .prepare("SELECT id FROM synchro_appliques WHERE date >= ?1 ORDER BY date")
+            .map_err(e)?
+            .query_map([depuis], |r| r.get(0))
+            .map_err(e)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(e)?,
     })
 }
 
