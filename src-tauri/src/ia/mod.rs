@@ -50,6 +50,8 @@ pub struct ConfigLocale {
 
 /// Préfixe des modèles locaux dans le journal et les contenus générés (« local:qwen3.5:4b »).
 pub const PREFIXE_LOCAL: &str = "local:";
+/// Préfixe des réponses d'une extension dans le journal (« extension:Rédacteur:modèle-a ») ; hors quota Gemini.
+pub const PREFIXE_EXTENSION: &str = "extension:";
 
 /// Limites réglables (valeurs par défaut prudentes pour le niveau gratuit).
 #[derive(Debug, Clone, Copy)]
@@ -324,6 +326,63 @@ impl ServiceIa {
         json_valide(requete, |r| async move { self.appeler_local(db, usage, local, &r).await }, valider).await
     }
 
+    /// Appel JSON confié à une extension installée (mêmes vérifications et réessais qu'avec Gemini).
+    /// Les images sont passées en fichiers (`images`), pas dans la requête. Renvoie aussi le modèle noté
+    /// dans le journal (« extension:Nom:modèle »).
+    pub async fn appeler_json_extension<T: DeserializeOwned>(
+        &self,
+        db: &Mutex<Connection>,
+        usage: &str,
+        extension: &crate::extensions::Extension,
+        tache: &str,
+        images: &[String],
+        requete: &Requete,
+        valider: impl Fn(&T) -> Result<(), String>,
+    ) -> Result<(T, String), ErreurIa> {
+        let modele = Mutex::new(format!("{PREFIXE_EXTENSION}{}", extension.nom));
+        let valeur = json_valide(
+            requete,
+            |r| {
+                let modele = &modele;
+                async move {
+                    let consigne = r
+                        .parties
+                        .iter()
+                        .filter_map(|p| match p {
+                            Partie::Texte(t) => Some(t.as_str()),
+                            Partie::Image { .. } => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    let demande = crate::extensions::Demande {
+                        version: crate::extensions::VERSION_PROTOCOLE,
+                        tache,
+                        systeme: &r.systeme,
+                        consigne: &consigne,
+                        images: images.to_vec(),
+                        schema: r.schema.as_ref(),
+                    };
+                    let debut = Instant::now();
+                    let resultat = crate::extensions::appeler(extension, &demande).await.map_err(ErreurIa::Extension);
+                    let mut nom = format!("{PREFIXE_EXTENSION}{}", extension.nom);
+                    if let Ok((_, m)) = &resultat {
+                        if !m.is_empty() {
+                            nom.push_str(&format!(":{m}"));
+                        }
+                    }
+                    let bilan = resultat.as_ref().map(|_| (0, 0));
+                    let _ = journaliser(&db.lock().unwrap(), usage, &nom, bilan, debut.elapsed().as_millis() as i64);
+                    *modele.lock().unwrap() = nom;
+                    resultat.map(|(texte, _)| Reponse { texte, jetons_entree: 0, jetons_sortie: 0 })
+                }
+            },
+            valider,
+        )
+        .await?;
+        let modele = modele.into_inner().unwrap();
+        Ok((valeur, modele))
+    }
+
     /// Tâche simple (questions, corrections, Feynman, cartes mentales) : Gemini ou l'IA locale selon le réglage.
     /// En mode secours, si Gemini est indisponible, la même demande part vers l'IA locale.
     /// Renvoie aussi le modèle qui a vraiment répondu (« local:… » pour l'IA locale).
@@ -388,7 +447,7 @@ where
 pub fn appels_du_jour(conn: &Connection) -> rusqlite::Result<i64> {
     conn.query_row(
         "SELECT count(*) FROM journal_ia
-         WHERE date(date / 1000, 'unixepoch', 'localtime') = date('now', 'localtime') AND modele NOT LIKE 'local:%'",
+         WHERE date(date / 1000, 'unixepoch', 'localtime') = date('now', 'localtime') AND modele NOT LIKE 'local:%' AND modele NOT LIKE 'extension:%'",
         [],
         |r| r.get(0),
     )
@@ -397,7 +456,7 @@ pub fn appels_du_jour(conn: &Connection) -> rusqlite::Result<i64> {
 pub fn etat(conn: &Connection, cle_presente: bool) -> rusqlite::Result<EtatIa> {
     let (appels, jetons): (i64, i64) = conn.query_row(
         "SELECT count(*), coalesce(sum(jetons_entree + jetons_sortie), 0) FROM journal_ia
-         WHERE date(date / 1000, 'unixepoch', 'localtime') = date('now', 'localtime') AND modele NOT LIKE 'local:%'",
+         WHERE date(date / 1000, 'unixepoch', 'localtime') = date('now', 'localtime') AND modele NOT LIKE 'local:%' AND modele NOT LIKE 'extension:%'",
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;

@@ -24,6 +24,8 @@ describe("choix de l'IA pour les tâches simples", () => {
     expect(modeleInstalle("qwen3.5:9b", ["qwen3.5:4b"])).toBe(false);
     expect(modeleInstalle("", ["qwen3.5:4b"])).toBe(false);
     expect(nomModele("local:qwen3.5:4b")).toBe("IA locale (qwen3.5:4b)");
+    expect(nomModele("extension:Rédacteur:modèle-a")).toBe("Rédacteur (modèle-a)");
+    expect(nomModele("extension:Rédacteur")).toBe("Rédacteur");
     expect(nomModele("gemini-3.8-flash")).toBe("Gemini (gemini-3.8-flash)");
   });
 });

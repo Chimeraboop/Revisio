@@ -14,6 +14,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::extensions::{self, Extension};
 use crate::ia::gemini::{Partie, Requete};
 use crate::ia::photos::{self as ia_photos, ContexteRedaction, Redaction, Reperage};
 use crate::{ecriture, maintenant_ms, vault, Etat};
@@ -32,6 +33,8 @@ pub struct LotPhotos {
     pub chapitre: Option<String>,
     pub dossier: Option<String>,
     pub message: Option<String>,
+    /// Qui a lu les photos (« gemini-… », « extension:Nom:… »).
+    pub modele: Option<String>,
 }
 
 /// Modification d'une note existante proposée par l'IA, en attente de l'accord de l'élève.
@@ -99,10 +102,11 @@ fn lire_lot(r: &rusqlite::Row) -> rusqlite::Result<LotPhotos> {
         chapitre: r.get(6)?,
         dossier: r.get(7)?,
         message: r.get(8)?,
+        modele: r.get(9)?,
     })
 }
 
-const COLONNES_LOT: &str = "id, date, source, photos, statut, matiere, chapitre, dossier, message";
+const COLONNES_LOT: &str = "id, date, source, photos, statut, matiere, chapitre, dossier, message, modele";
 
 pub fn lots(conn: &Connection, limite: usize) -> rusqlite::Result<Vec<LotPhotos>> {
     let mut req = conn.prepare(&format!("SELECT {COLONNES_LOT} FROM lots_photos ORDER BY id DESC LIMIT ?1"))?;
@@ -225,6 +229,7 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
     .await
     .map_err(|e| e.to_string())??;
     let parties_images = || images.iter().map(|(mime, b64)| Partie::Image { mime: mime.clone(), base64: b64.clone() });
+    let (redacteur, _nettoyage) = choisir_redacteur(etat, &reglages, id, &images)?;
 
     // 1. Repérage
     let arbre = ia_photos::arbre(&etat.db.lock().unwrap()).map_err(|e| e.to_string())?;
@@ -238,10 +243,8 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         temperature: Some(0.2),
         historique: Vec::new(),
     };
-    let reperage: Reperage = etat
-        .ia
-        .appeler_json(&etat.db, "photos", etat.limites_ia(), &requete, |r| ia_photos::valider_reperage(r, &arbre))
-        .await?;
+    let (reperage, modele): (Reperage, String) =
+        demander(etat, &redacteur, &requete, |r| ia_photos::valider_reperage(r, &arbre)).await?;
     if !reperage.lisible {
         let raison = if reperage.probleme.trim().is_empty() { "photos illisibles" } else { reperage.probleme.trim() };
         return Ok(("illisible", format!("Rien n'a été écrit : {raison}")));
@@ -251,7 +254,7 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         let conn = etat.db.lock().unwrap();
         let _ = conn.execute(
             "UPDATE lots_photos SET matiere = ?1, chapitre = ?2, dossier = ?3, modele = ?4 WHERE id = ?5",
-            params![reperage.matiere, reperage.chapitre, dossier, reglages.modele_ia, id],
+            params![reperage.matiere, reperage.chapitre, dossier, modele, id],
         );
     }
 
@@ -261,12 +264,8 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
     parties.extend(parties_images());
     let requete = Requete { parties, schema: Some(ia_photos::schema_redaction()), temperature: Some(0.3), ..requete };
     let existantes = contexte.existantes.clone();
-    let redaction: Redaction = etat
-        .ia
-        .appeler_json(&etat.db, "photos", etat.limites_ia(), &requete, |r| {
-            ia_photos::valider_redaction(r, &existantes)
-        })
-        .await?;
+    let (redaction, _): (Redaction, String) =
+        demander(etat, &redacteur, &requete, |r| ia_photos::valider_redaction(r, &existantes)).await?;
 
     // 3. Écriture des nouvelles notes, propositions pour les notes existantes.
     let cree_le = chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string();
@@ -312,6 +311,68 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         message.push_str(&format!(" ; déjà présentes, non remplacées : {}", deja.join(", ")));
     }
     Ok(("termine", message))
+}
+
+/// Qui rédige les notes : Gemini, ou une extension installée à qui les photos sont passées en fichiers.
+enum Redacteur {
+    Gemini,
+    Extension { extension: Extension, images: Vec<String> },
+}
+
+/// Supprime à la fin du traitement (même interrompu) les photos préparées pour une extension.
+struct Nettoyage(Option<PathBuf>);
+
+impl Drop for Nettoyage {
+    fn drop(&mut self) {
+        if let Some(d) = &self.0 {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+}
+
+fn choisir_redacteur(
+    etat: &Etat,
+    reglages: &crate::settings::Reglages,
+    lot: i64,
+    images: &[(String, String)],
+) -> Result<(Redacteur, Nettoyage), String> {
+    use base64::Engine;
+    let Some(id) = &reglages.extension_photos else { return Ok((Redacteur::Gemini, Nettoyage(None))) };
+    let extension = extensions::trouver(&etat.dossier, id, "photos").ok_or_else(|| {
+        format!("L'extension choisie pour les photos (« {id} ») n'est plus installée : choisis un autre rédacteur dans Photos de cours.")
+    })?;
+    // Les photos préparées (réduites, tournées, en JPEG) sont écrites dans le cache des données de Révisio.
+    let dossier = etat.dossier.join("cache").join("extensions").join(format!("lot-{lot}"));
+    let _ = std::fs::remove_dir_all(&dossier);
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("Préparation des photos : {e}"))?;
+    let nettoyage = Nettoyage(Some(dossier.clone()));
+    let mut chemins = Vec::new();
+    for (i, (mime, b64)) in images.iter().enumerate() {
+        let ext = mime.strip_prefix("image/").unwrap_or("jpg").replace("jpeg", "jpg");
+        let chemin = dossier.join(format!("photo-{}.{ext}", i + 1));
+        let octets = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+        std::fs::write(&chemin, octets).map_err(|e| format!("Préparation des photos : {e}"))?;
+        chemins.push(chemin.to_string_lossy().into_owned());
+    }
+    Ok((Redacteur::Extension { extension, images: chemins }, nettoyage))
+}
+
+/// Un appel JSON au rédacteur choisi ; renvoie aussi le modèle qui a répondu.
+async fn demander<T: serde::de::DeserializeOwned>(
+    etat: &Etat,
+    redacteur: &Redacteur,
+    requete: &Requete,
+    valider: impl Fn(&T) -> Result<(), String>,
+) -> Result<(T, String), String> {
+    match redacteur {
+        Redacteur::Gemini => Ok((
+            etat.ia.appeler_json(&etat.db, "photos", etat.limites_ia(), requete, valider).await?,
+            requete.modele.clone(),
+        )),
+        Redacteur::Extension { extension, images } => {
+            Ok(etat.ia.appeler_json_extension(&etat.db, "photos", extension, "photos", images, requete, valider).await?)
+        }
+    }
 }
 
 fn pluriel(n: usize) -> &'static str {
@@ -480,9 +541,9 @@ fn noter(app: &AppHandle, modif: impl FnOnce(&mut EtatSurveillance)) {
 
 async fn verifier_dossier(app: &AppHandle) {
     let etat = app.state::<Etat>();
-    let (dossier, autorisee, vault_choisi) = {
+    let (dossier, autorisee, vault_choisi, extension) = {
         let r = etat.reglages.lock().unwrap();
-        (r.dossier_photos.clone(), r.ecriture_autorisee, r.chemin_vault.is_some())
+        (r.dossier_photos.clone(), r.ecriture_autorisee, r.chemin_vault.is_some(), r.extension_photos.clone())
     };
     let Some(dossier) = dossier else { return };
     if etat.photos.lock().unwrap().etat.en_cours {
@@ -516,7 +577,9 @@ async fn verifier_dossier(app: &AppHandle) {
         Some("L'écriture dans le vault est désactivée : les photos attendent.".into())
     } else if etat.ia.gemini_coupe() {
         Some("Mode local : les photos seront traitées en repassant en ligne.".into())
-    } else if !etat.ia.cle_presente() {
+    } else if let Some(id) = extension.as_deref().filter(|id| extensions::trouver(&etat.dossier, id, "photos").is_none()) {
+        Some(format!("L'extension « {id} » n'est plus installée : les photos attendent."))
+    } else if extension.is_none() && !etat.ia.cle_presente() {
         Some("Aucune clé Gemini : les photos attendent.".into())
     } else {
         None

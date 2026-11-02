@@ -10,6 +10,7 @@ pub mod cartes_ia;
 pub mod cartes_mentales;
 pub mod db;
 pub mod discussion;
+pub mod extensions;
 pub mod ecriture;
 pub mod ia;
 pub mod indexer;
@@ -233,6 +234,8 @@ pub fn run() {
             commandes::accepter_proposition,
             commandes::refuser_proposition,
             commandes::definir_dossier_photos,
+            commandes::extensions_installees,
+            commandes::definir_extension_photos,
             commandes::compter_photos_dossier,
             commandes::etat_photos,
             commandes::dossiers_drive,

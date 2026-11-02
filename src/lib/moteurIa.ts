@@ -78,8 +78,13 @@ export function useMoteurIa(): MoteurIa {
   return { etat, locale, reglages, enLigne, gemini, modeleLocal, recharger, ...choisirMoteur(mode, gemini, modeleLocal) };
 }
 
-/** Nom lisible du modèle qui a répondu (« local:qwen3.5:4b » → « IA locale (qwen3.5:4b) »). */
+/** Nom lisible du modèle qui a répondu (« local:qwen3.5:4b » → « IA locale (qwen3.5:4b) »,
+ * « extension:Rédacteur:modèle-a » → « Rédacteur (modèle-a) »). */
 export function nomModele(modele: string | undefined | null): string {
   if (!modele) return "";
+  if (modele.startsWith("extension:")) {
+    const [nom, ...reste] = modele.slice(10).split(":");
+    return reste.length ? `${nom} (${reste.join(":")})` : nom;
+  }
   return modele.startsWith("local:") ? `IA locale (${modele.slice(6)})` : `Gemini (${modele})`;
 }

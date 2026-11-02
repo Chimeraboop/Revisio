@@ -666,6 +666,23 @@ pub fn definir_dossier_photos(
     modifier_reglages(&etat, |r| r.dossier_photos = chemin)
 }
 
+/// Extensions installées dans le dossier `extensions` des données (voir `extensions.rs`).
+#[tauri::command]
+pub fn extensions_installees(etat: State<Etat>) -> Vec<crate::extensions::Extension> {
+    crate::extensions::lister(&etat.dossier)
+}
+
+/// Rédacteur des notes tirées des photos : une extension installée, ou Gemini (`None`).
+#[tauri::command]
+pub fn definir_extension_photos(etat: State<Etat>, id: Option<String>) -> Result<Reglages, String> {
+    if let Some(id) = &id {
+        if crate::extensions::trouver(&etat.dossier, id, "photos").is_none() {
+            return Err("Cette extension n'est pas installée ou ne sait pas rédiger les notes des photos.".into());
+        }
+    }
+    modifier_reglages(&etat, |r| r.extension_photos = id)
+}
+
 /// Nombre de photos d'un dossier que Révisio n'a encore jamais vues.
 #[tauri::command]
 pub fn compter_photos_dossier(etat: State<Etat>, chemin: String) -> usize {

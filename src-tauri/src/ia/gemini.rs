@@ -71,6 +71,8 @@ pub enum ErreurIa {
     GeminiCoupe,
     /// Gemini indisponible, et l'IA locale n'a pas pu prendre le relais.
     Secours { gemini: Box<ErreurIa>, locale: Box<ErreurIa> },
+    /// Une extension installée (voir `extensions.rs`) n'a pas pu répondre.
+    Extension(String),
 }
 
 impl ErreurIa {
@@ -117,6 +119,7 @@ impl std::fmt::Display for ErreurIa {
                  l'IA locale (choisis un modèle dans les Réglages) ; pour le reste, repasse « En ligne » (en haut à droite)."
             ),
             ErreurIa::Secours { gemini, locale } => write!(f, "{gemini} L'IA locale n'a pas pu prendre le relais : {locale}"),
+            ErreurIa::Extension(m) => write!(f, "Extension : {m}"),
         }
     }
 }

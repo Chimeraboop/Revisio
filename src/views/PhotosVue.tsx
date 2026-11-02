@@ -1,17 +1,18 @@
-// Photos de cours → notes du vault (Gemini avec vision). Import manuel ou dossier surveillé
+// Photos de cours → notes du vault (Gemini avec vision, ou une extension installée). Import manuel ou dossier surveillé
 // (par exemple un dossier Google Drive synchronisé : une photo prise au lycée devient une note).
 // Les nouvelles notes sont écrites aussitôt (annulables) ; une note existante n'est modifiée
 // qu'après l'accord de l'élève.
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Camera, Check, FilePen, FolderSync, ImagePlus, KeyRound, RotateCcw, X } from "lucide-react";
+import { Camera, Check, FilePen, FolderSync, ImagePlus, KeyRound, RotateCcw, Sparkles, X } from "lucide-react";
 import EntetePage from "../composants/EntetePage";
 import JournalVault from "../composants/JournalVault";
 import Message from "../composants/Message";
 import { BoutonArreter } from "../composants/TachesIa";
-import { api, EtatSurveillancePhotos, LotPhotos, messageErreur, PropositionVault, Reglages } from "../lib/api";
+import { api, EtatSurveillancePhotos, Extension, LotPhotos, messageErreur, PropositionVault, Reglages } from "../lib/api";
 import { useEnLigne, useModeLocal } from "../lib/connexion";
+import { nomModele } from "../lib/moteurIa";
 import { diffLignes, replier } from "../lib/diff";
 import { lancerTache, useDerniereTache } from "../lib/taches";
 
@@ -39,6 +40,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
   const [lots, setLots] = useState<LotPhotos[]>([]);
   const [propositions, setPropositions] = useState<PropositionVault[]>([]);
   const [surveillance, setSurveillance] = useState<EtatSurveillancePhotos | null>(null);
+  const [extensions, setExtensions] = useState<Extension[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const tache = useDerniereTache("photos");
@@ -54,6 +56,10 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
   useEffect(() => {
     recharger();
     api.etatIa().then((e) => setClePresente(e.clePresente)).catch(() => setClePresente(null));
+    api
+      .extensionsInstallees()
+      .then((l) => setExtensions(l.filter((e) => e.taches.includes("photos"))))
+      .catch(() => setExtensions([]));
     const arrets = [
       listen("photos-lot", () => recharger()),
       listen<EtatSurveillancePhotos>("photos-surveillance", (e) => setSurveillance(e.payload)),
@@ -65,7 +71,18 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
     if (tache && tache.statut !== "en-cours") recharger();
   }, [tache?.statut]);
 
-  const gemini = enLigne && !modeLocal && clePresente !== false;
+  // Rédacteur des notes : Gemini, ou l'extension choisie (qui n'a pas besoin de la clé Gemini).
+  const extension = extensions.find((e) => e.id === reglages.extensionPhotos) ?? null;
+  const pret = enLigne && !modeLocal && (extension !== null || clePresente !== false);
+
+  async function choisirRedacteur(id: string | null) {
+    setErreur(null);
+    try {
+      onReglages(await api.definirExtensionPhotos(id));
+    } catch (e) {
+      setErreur(messageErreur(e));
+    }
+  }
 
   async function importer() {
     setErreur(null);
@@ -112,11 +129,21 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
           </button>
         </Message>
       )}
-      {modeLocal && <Message genre="info">Mode local : la lecture des photos demande Gemini. Repasse « En ligne ».</Message>}
+      {modeLocal && (
+        <Message genre="info">Mode local : la lecture des photos demande {extension ? extension.nom : "Gemini"}. Repasse « En ligne ».</Message>
+      )}
       {!enLigne && !modeLocal && (
         <Message genre="hors-ligne">Hors ligne : la lecture des photos demande Internet. Les photos du dossier attendront.</Message>
       )}
-      {enLigne && !modeLocal && clePresente === false && (
+      {reglages.extensionPhotos && extensions.length > 0 && !extension && (
+        <Message genre="attention">
+          L'extension choisie pour les photos n'est plus installée.{" "}
+          <button className="lien-discret" onClick={() => choisirRedacteur(null)}>
+            Revenir à Gemini
+          </button>
+        </Message>
+      )}
+      {enLigne && !modeLocal && !extension && clePresente === false && (
         <Message genre="attention">
           Aucune clé Gemini.{" "}
           <button className="lien-discret" onClick={onAllerAuxReglages}>
@@ -149,8 +176,28 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
           Choisis les photos d'un même cours (10 au plus). Révisio reconnaît la matière et le chapitre, range les notes
           dans le bon dossier et en fait une note par notion.
         </p>
+        {extensions.length > 0 && (
+          <div className="rangee">
+            <span className="petit texte-doux">Rédigées par :</span>
+            <div className="segmente" role="radiogroup" aria-label="Qui lit les photos et rédige les notes">
+              {[{ id: null, nom: "Gemini" }, ...extensions].map((e) => (
+                <button
+                  key={e.id ?? "gemini"}
+                  role="radio"
+                  aria-checked={(extension?.id ?? null) === e.id}
+                  className={"segment" + ((extension?.id ?? null) === e.id ? " actif" : "")}
+                  disabled={enCours}
+                  onClick={() => choisirRedacteur(e.id)}
+                >
+                  {e.id && <Sparkles size={13} aria-hidden />} {e.nom}
+                </button>
+              ))}
+            </div>
+            {extension?.description && <span className="petit texte-doux">{extension.description}</span>}
+          </div>
+        )}
         <div className="rangee">
-          <button className="bouton bouton-principal" disabled={!reglages.ecritureAutorisee || !gemini || enCours} onClick={importer}>
+          <button className="bouton bouton-principal" disabled={!reglages.ecritureAutorisee || !pret || enCours} onClick={importer}>
             <ImagePlus size={15} aria-hidden /> Choisir des photos…
           </button>
           {enCours && tache && (
@@ -183,6 +230,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
                     <span className="texte-doux petit">
                       {l.source === "dossier" ? "du dossier surveillé" : "importées"}, {DATE.format(l.date)}
                       {l.chapitre ? `, ${l.matiere} › ${l.chapitre}` : ""}
+                      {l.modele ? `, par ${nomModele(l.modele)}` : ""}
                     </span>
                   </span>
                   <span className={`etiquette statut-lot statut-${l.statut}`}>{STATUTS[l.statut] ?? l.statut}</span>
@@ -191,7 +239,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
                 {(l.statut === "erreur" || l.statut === "illisible") && (
                   <button
                     className="bouton bouton-petit"
-                    disabled={!reglages.ecritureAutorisee || !gemini || enCours}
+                    disabled={!reglages.ecritureAutorisee || !pret || enCours}
                     onClick={() => traiter(`${l.photos.length} photo${l.photos.length > 1 ? "s" : ""}`, (id) => api.relancerLotPhotos(l.id, id))}
                   >
                     <RotateCcw size={14} aria-hidden /> Réessayer

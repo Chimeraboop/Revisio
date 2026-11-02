@@ -51,6 +51,8 @@ export interface Reglages {
   ecritureAutorisee: boolean;
   /** Dossier surveillé où arrivent les photos de cours. */
   dossierPhotos: string | null;
+  /** Extension installée qui rédige les notes des photos à la place de Gemini (null : Gemini). */
+  extensionPhotos: string | null;
   /** L'IA crée toute seule les cartes des notes de cours. */
   cartesIaAuto: boolean;
 }
@@ -88,6 +90,17 @@ export interface LotPhotos {
   chapitre: string | null;
   dossier: string | null;
   message: string | null;
+  /** Qui a lu les photos (« gemini-… », « extension:Nom:… »). */
+  modele: string | null;
+}
+
+/** Extension installée à côté de Révisio (dossier « extensions » des données). */
+export interface Extension {
+  id: string;
+  nom: string;
+  description: string;
+  version: string;
+  taches: string[];
 }
 
 /** Modification d'une note existante proposée par l'IA (en attente de l'accord de l'élève). */
@@ -830,6 +843,8 @@ export const api = {
     invoke<Reglages>("definir_dossier_photos", { chemin, traiterExistantes }),
   compterPhotosDossier: (chemin: string) => invoke<number>("compter_photos_dossier", { chemin }),
   etatPhotos: () => invoke<EtatSurveillancePhotos>("etat_photos"),
+  extensionsInstallees: () => invoke<Extension[]>("extensions_installees"),
+  definirExtensionPhotos: (id: string | null) => invoke<Reglages>("definir_extension_photos", { id }),
   dossiersDrive: () => invoke<string[]>("dossiers_drive"),
   definirTheme: (theme: Theme) => invoke<Reglages>("definir_theme", { theme }),
   definirAccent: (accent: Accent) => invoke<Reglages>("definir_accent", { accent }),

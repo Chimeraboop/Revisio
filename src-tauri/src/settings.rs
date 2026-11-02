@@ -77,6 +77,8 @@ pub struct Reglages {
     pub cartes_ia_auto: bool,
     /// Dossier surveillé où arrivent les photos de cours (par ex. un dossier Google Drive synchronisé).
     pub dossier_photos: Option<String>,
+    /// Extension installée qui rédige les notes des photos à la place de Gemini (identifiant = nom de son dossier).
+    pub extension_photos: Option<String>,
 }
 
 impl Default for Reglages {
@@ -113,6 +115,7 @@ impl Default for Reglages {
             ecriture_autorisee: false,
             cartes_ia_auto: true,
             dossier_photos: None,
+            extension_photos: None,
         }
     }
 }
