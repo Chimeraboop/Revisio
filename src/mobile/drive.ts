@@ -6,7 +6,7 @@
 // répond aussitôt, sans rien demander, tant que l'élève est connecté à son compte dans ce navigateur.
 import { ecrire, effacer, lire } from "./stockage";
 
-export const CLIENT_ID = "703196424411-015qtogkj20g9bglej46pnjpb5gle7ig.apps.googleusercontent.com";
+export const CLIENT_ID = "703196424411-015qtogkj20g9bg1ej46pnjpb5gle7ig.apps.googleusercontent.com";
 const PORTEE = "https://www.googleapis.com/auth/drive.appdata";
 const DRIVE = "https://www.googleapis.com/drive/v3/files";
 const ENVOI = "https://www.googleapis.com/upload/drive/v3/files";
