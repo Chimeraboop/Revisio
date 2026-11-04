@@ -6,7 +6,7 @@
 //! l'écriture dans le vault, le journal et l'annulation. Pour l'instant, une seule tâche peut être
 //! confiée à une extension : la rédaction des notes tirées des photos de cours (« photos »).
 //!
-//! Demande : `{ version, tache, systeme, consigne, images, schema }` (`images` : chemins de fichiers JPEG).
+//! Demande : `{ version, tache, systeme, consigne, images, schema }` (`images` : chemins des photos préparées, JPEG / PNG / WebP / HEIC, ou de PDF).
 //! Réponse : `{ "ok": true, "reponse": <JSON conforme au schéma>, "modele": "…" }`
 //! ou `{ "ok": false, "erreur": "message en français" }`.
 

@@ -534,6 +534,11 @@ const INTERVALLE: std::time::Duration = std::time::Duration::from_secs(300);
 /// est envoyé à l'interface (évènement « synchro »).
 pub fn demarrer(app: tauri::AppHandle) {
     use tauri::{Emitter, Manager};
+    // Instance de test (dossier de données à part) : la connexion Google est partagée par toutes les instances
+    // (coffre de Windows), une synchro automatique y remplacerait le contenu du vrai PC sur le téléphone.
+    if std::env::var_os("REVISIO_DOSSIER_DONNEES").is_some_and(|d| !d.is_empty()) {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(20)).await;
         loop {

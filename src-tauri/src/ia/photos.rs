@@ -18,15 +18,18 @@ use serde_json::{json, Value};
 use crate::ecriture::nom_de_fichier;
 use crate::vault::dossier_ignore;
 
-/// Formats de photo acceptés.
-pub const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "heic", "heif"];
+/// Formats acceptés : photos, et PDF (cours scannés ou distribués), que Gemini lit directement.
+pub const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "heic", "heif", "pdf"];
+/// Taille au plus de tous les fichiers d'un lot envoyés ensemble à Gemini (les données en ligne d'une requête
+/// sont limitées à 20 Mo, base64 compris).
+pub const OCTETS_MAX_LOT: usize = 19_000_000;
 /// Photos au plus par lot (un cours).
 pub const PHOTOS_PAR_LOT: usize = 10;
 /// Côté le plus long après réduction (assez pour lire une écriture manuscrite).
 const COTE_MAX: u32 = 2000;
 
-pub const CONSIGNE_SYSTEME: &str = "Tu aides un lycéen à transformer les photos de ses cours en notes Markdown (format Obsidian). \
-Tu transcris fidèlement ce qui est sur les photos : tu n'inventes rien, tu n'ajoutes aucune connaissance extérieure. \
+pub const CONSIGNE_SYSTEME: &str = "Tu aides un lycéen à transformer les photos (ou PDF) de ses cours en notes Markdown \
+(format Obsidian). Tu transcris fidèlement ce qui est sur les photos ou dans les PDF : tu n'inventes rien, tu n'ajoutes aucune connaissance extérieure. \
 Si un passage est illisible, écris [illisible] plutôt que de deviner. Tu écris en français (ou dans la langue du cours \
 pour les langues étrangères), sans emoji.";
 
@@ -39,12 +42,21 @@ pub fn est_une_photo(chemin: &Path) -> bool {
 }
 
 /// Photo prête à envoyer : réduite à 2000 px, tournée dans le bon sens (EXIF), en JPEG.
-/// Les photos HEIC (iPhone) sont envoyées telles quelles : Gemini sait les lire.
+/// Les photos HEIC (iPhone) et les PDF sont envoyés tels quels : Gemini sait les lire.
 pub fn preparer_photo(chemin: &Path) -> Result<(String, String), String> {
     let nom = chemin.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let octets = std::fs::read(chemin).map_err(|e| format!("Lecture de la photo {nom} : {e}"))?;
+    let octets = std::fs::read(chemin).map_err(|e| format!("Lecture de {nom} : {e}"))?;
     let b64 = |o: &[u8]| base64::engine::general_purpose::STANDARD.encode(o);
     let ext = chemin.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if ext == "pdf" {
+        if !octets.starts_with(b"%PDF") {
+            return Err(format!("{nom} n'est pas un PDF lisible."));
+        }
+        if octets.len() * 4 / 3 > OCTETS_MAX_LOT {
+            return Err(format!("PDF {nom} trop lourd (plus de 14 Mo) : découpe-le en plusieurs fichiers."));
+        }
+        return Ok(("application/pdf".into(), b64(&octets)));
+    }
     if ext == "heic" || ext == "heif" {
         if octets.len() > 7_000_000 {
             return Err(format!("Photo {nom} trop lourde (HEIC de plus de 7 Mo)."));
@@ -125,7 +137,7 @@ pub struct Notion {
 
 pub fn consigne_reperage(nombre: usize, arbre: &BTreeMap<String, Vec<String>>) -> String {
     format!(
-        "Voici {nombre} photo(s) d'un même cours. Voici l'organisation du dossier de notes de l'élève \
+        "Voici {nombre} photo(s) ou PDF d'un même cours (un PDF peut avoir plusieurs pages). Voici l'organisation du dossier de notes de l'élève \
 (dossier : noms des notes, sans « .md ») :\n{}\n\n\
 Réponds en JSON :\n\
 - lisible : faux si les photos sont illisibles ou ne contiennent pas de cours (par exemple seulement des exercices \
@@ -402,9 +414,58 @@ pub fn retablir_sauts_de_ligne(texte: &str) -> String {
     resultat
 }
 
+/// Encadrés (callouts) écrits sans les « > » du contenu : l'en-tête `> [!info]+ Définition` est suivi
+/// directement d'une ligne de texte sans « > ». Ces lignes, jusqu'à l'encadré ou au titre suivant, reçoivent
+/// leur « > » (sinon Obsidian les affiche hors de l'encadré). Un encadré bien écrit n'est pas touché.
+pub fn reparer_encadres(texte: &str) -> String {
+    let lignes: Vec<&str> = texte.lines().collect();
+    let est_entete = |l: &str| l.trim_start().starts_with("> [!") || l.trim_start().starts_with(">[!");
+    let mut sortie: Vec<String> = Vec::with_capacity(lignes.len());
+    let mut i = 0;
+    while i < lignes.len() {
+        let ligne = lignes[i];
+        sortie.push(ligne.to_string());
+        i += 1;
+        let casse = est_entete(ligne)
+            && lignes.get(i).is_some_and(|l| !l.trim().is_empty() && !l.trim_start().starts_with('>'));
+        if !casse {
+            continue;
+        }
+        let debut = i;
+        while i < lignes.len() && !est_entete(lignes[i]) && !lignes[i].trim_start().starts_with('#') {
+            i += 1;
+        }
+        // Les lignes vides de la fin restent hors de l'encadré (elles le séparent du suivant).
+        let mut fin = i;
+        while fin > debut && lignes[fin - 1].trim().is_empty() {
+            fin -= 1;
+        }
+        for l in &lignes[debut..fin] {
+            sortie.push(if l.trim().is_empty() { ">".into() } else { format!("> {l}") });
+        }
+        sortie.extend(lignes[fin..i].iter().map(|l| l.to_string()));
+    }
+    sortie.join("\n")
+}
+
+/// Les titres qui contiennent « / », « : »… n'ont pas le même nom de fichier (« G1/S » → « G1 S ») : les liens
+/// `[[titre]]` écrits entre les notes d'un même lot sont réécrits vers le vrai nom, sinon ils ne mènent nulle part.
+pub fn corriger_liens(contenu: &str, titres: &[&str]) -> String {
+    let mut texte = contenu.to_string();
+    for titre in titres {
+        let nom = nom_de_fichier(titre);
+        if nom != *titre {
+            for fin in ["]]", "|", "#"] {
+                texte = texte.replace(&format!("[[{titre}{fin}"), &format!("[[{nom}{fin}"));
+            }
+        }
+    }
+    texte
+}
+
 /// Note complète : frontmatter (tags, date de création) puis le corps rédigé.
 pub fn note_complete(note: &NoteRedigee, cree_le: &str) -> String {
-    let mut corps = retablir_sauts_de_ligne(note.contenu.trim()).trim().to_string();
+    let mut corps = reparer_encadres(retablir_sauts_de_ligne(note.contenu.trim()).trim());
     // Frontmatter écrit malgré la consigne : on le retire, Révisio met le sien.
     if corps.starts_with("---") {
         if let Some(fin) = corps[3..].find("\n---") {
@@ -535,7 +596,49 @@ mod tests {
         let octets = base64::engine::general_purpose::STANDARD.decode(b64).unwrap();
         let img = image::load_from_memory(&octets).unwrap();
         assert_eq!((img.width(), img.height()), (2000, 667));
-        assert!(est_une_photo(&chemin) && est_une_photo(Path::new("IMG_1.HEIC")) && !est_une_photo(Path::new("a.pdf")));
+        assert!(est_une_photo(&chemin) && est_une_photo(Path::new("IMG_1.HEIC")) && !est_une_photo(Path::new("a.docx")));
+        std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
+    #[test]
+    fn encadres_sans_chevrons_repares() {
+        let casse = "> [!info]+ Définition\nLe cycle est piloté :\n- les **cyclines** ;\n\nLe complexe actif.\n\n\
+> [!tip]+ Notes liées\n[[A]], [[B]]";
+        assert_eq!(
+            reparer_encadres(casse),
+            "> [!info]+ Définition\n> Le cycle est piloté :\n> - les **cyclines** ;\n>\n> Le complexe actif.\n\n\
+> [!tip]+ Notes liées\n> [[A]], [[B]]"
+        );
+        // Bien écrit (ou suivi d'une ligne vide puis d'un paragraphe normal) : rien ne change.
+        let correct = "> [!info]+ Définition\n> Texte.\n\nParagraphe hors encadré.\n\n> [!note]- Vide\n\n## Titre\nTexte";
+        assert_eq!(reparer_encadres(correct), correct);
+        // Un titre arrête la réparation.
+        assert_eq!(reparer_encadres("> [!note]+ A\nTexte\n## Suite\nAutre"), "> [!note]+ A\n> Texte\n## Suite\nAutre");
+    }
+
+    #[test]
+    fn liens_vers_les_titres_raccourcis() {
+        let titres = ["Les points de contrôle (G1/S, G2/M)", "Échec du contrôle : cancers", "La mitose"];
+        assert_eq!(
+            corriger_liens("[[Les points de contrôle (G1/S, G2/M)]], [[Échec du contrôle : cancers|cancers]], [[La mitose]]", &titres),
+            "[[Les points de contrôle (G1 S, G2 M)]], [[Échec du contrôle cancers|cancers]], [[La mitose]]"
+        );
+    }
+
+    #[test]
+    fn pdf_envoye_tel_quel() {
+        let dossier = std::env::temp_dir().join(format!("revisio-pdf-{}", std::process::id()));
+        std::fs::create_dir_all(&dossier).unwrap();
+        let pdf = dossier.join("Cours.PDF");
+        std::fs::write(&pdf, b"%PDF-1.7\n%fin").unwrap();
+        assert!(est_une_photo(&pdf));
+        let (mime, b64) = preparer_photo(&pdf).unwrap();
+        assert_eq!(mime, "application/pdf");
+        assert_eq!(base64::engine::general_purpose::STANDARD.decode(b64).unwrap(), b"%PDF-1.7\n%fin");
+        // Un faux PDF (autre contenu renommé) est refusé avec un message clair.
+        let faux = dossier.join("faux.pdf");
+        std::fs::write(&faux, b"PK\x03\x04").unwrap();
+        assert!(preparer_photo(&faux).unwrap_err().contains("pas un PDF"));
         std::fs::remove_dir_all(&dossier).unwrap();
     }
 }

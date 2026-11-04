@@ -230,6 +230,11 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
     .map_err(|e| e.to_string())??;
     let parties_images = || images.iter().map(|(mime, b64)| Partie::Image { mime: mime.clone(), base64: b64.clone() });
     let (redacteur, _nettoyage) = choisir_redacteur(etat, &reglages, id, &images)?;
+    if matches!(redacteur, Redacteur::Gemini) && images.iter().map(|(_, b64)| b64.len()).sum::<usize>() > ia_photos::OCTETS_MAX_LOT {
+        return Err("Ces fichiers sont trop lourds pour un seul envoi à Gemini (plus de 14 Mo en tout) : \
+importe-les en plusieurs fois."
+            .into());
+    }
 
     // 1. Repérage
     let arbre = ia_photos::arbre(&etat.db.lock().unwrap()).map_err(|e| e.to_string())?;
@@ -281,13 +286,15 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
     };
     let mut creees = 0;
     let mut deja = Vec::new();
+    let titres: Vec<&str> = redaction.notes.iter().map(|n| n.titre.as_str()).collect();
     for note in &redaction.notes {
         let chemin = format!("{dossier}/{}.md", ecriture::nom_de_fichier(&note.titre));
         if racine.join(&chemin).exists() {
             deja.push(note.titre.clone());
             continue;
         }
-        ecriture::creer(&conn, &ctx, &chemin, &ia_photos::note_complete(note, &cree_le))?;
+        let texte = ia_photos::corriger_liens(&ia_photos::note_complete(note, &cree_le), &titres);
+        ecriture::creer(&conn, &ctx, &chemin, &texte)?;
         creees += 1;
     }
     let mut proposees = 0;
@@ -295,7 +302,14 @@ async fn traiter(etat: &Etat, id: i64, photos: Vec<String>) -> Result<(&'static 
         let Ok(avant) = vault::lire_octets(&racine, &m.chemin) else { continue };
         conn.execute(
             "INSERT INTO propositions_vault(date, lot_id, chemin, avant, apres, raison) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![maintenant_ms(), id, m.chemin, avant, ia_photos::retablir_sauts_de_ligne(&m.contenu), m.raison],
+            params![
+                maintenant_ms(),
+                id,
+                m.chemin,
+                avant,
+                ia_photos::corriger_liens(&ia_photos::retablir_sauts_de_ligne(&m.contenu), &titres),
+                m.raison
+            ],
         )
         .map_err(|e| e.to_string())?;
         proposees += 1;
@@ -348,7 +362,10 @@ fn choisir_redacteur(
     let nettoyage = Nettoyage(Some(dossier.clone()));
     let mut chemins = Vec::new();
     for (i, (mime, b64)) in images.iter().enumerate() {
-        let ext = mime.strip_prefix("image/").unwrap_or("jpg").replace("jpeg", "jpg");
+        let ext = match mime.as_str() {
+            "application/pdf" => "pdf".to_string(),
+            m => m.strip_prefix("image/").unwrap_or("jpg").replace("jpeg", "jpg"),
+        };
         let chemin = dossier.join(format!("photo-{}.{ext}", i + 1));
         let octets = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
         std::fs::write(&chemin, octets).map_err(|e| format!("Préparation des photos : {e}"))?;

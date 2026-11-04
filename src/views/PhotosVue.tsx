@@ -23,7 +23,17 @@ interface Props {
   onAllerAuxReglages: () => void;
 }
 
-const EXTENSIONS = ["jpg", "jpeg", "png", "webp", "heic", "heif"];
+const EXTENSIONS = ["jpg", "jpeg", "png", "webp", "heic", "heif", "pdf"];
+
+/** « 3 photos », « 1 PDF », « 2 photos et 1 PDF ». */
+function decrireFichiers(chemins: string[]): string {
+  const pdf = chemins.filter((c) => /\.pdf$/i.test(c)).length;
+  const photos = chemins.length - pdf;
+  const morceaux = [];
+  if (photos > 0) morceaux.push(`${photos} photo${photos > 1 ? "s" : ""}`);
+  if (pdf > 0) morceaux.push(`${pdf} PDF`);
+  return morceaux.join(" et ");
+}
 const DATE = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const STATUTS: Record<string, string> = {
   attente: "En attente",
@@ -88,12 +98,12 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
     setErreur(null);
     const choix = await open({
       multiple: true,
-      title: "Choisir les photos d'un même cours",
-      filters: [{ name: "Photos", extensions: EXTENSIONS }],
+      title: "Choisir les photos ou PDF d'un même cours",
+      filters: [{ name: "Photos et PDF", extensions: EXTENSIONS }],
     });
     const chemins = Array.isArray(choix) ? choix : typeof choix === "string" ? [choix] : [];
     if (chemins.length === 0) return;
-    traiter(`${chemins.length} photo${chemins.length > 1 ? "s" : ""}`, (id) => api.importerPhotos(chemins, id));
+    traiter(decrireFichiers(chemins), (id) => api.importerPhotos(chemins, id));
   }
 
   function traiter(titre: string, travail: (tache: string) => Promise<LotPhotos>) {
@@ -117,7 +127,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
         icone={Camera}
         surTitre="Créer avec l'IA"
         titre="Photos de cours"
-        description="Tes photos de cours deviennent des notes dans ton vault, rédigées comme les tiennes, puis des cartes de révision."
+        description="Tes photos ou PDF de cours deviennent des notes dans ton vault, rédigées comme les tiennes, puis des cartes de révision."
       />
 
       {!reglages.ecritureAutorisee && (
@@ -170,10 +180,10 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
 
       <section className="carte bloc">
         <h2 className="titre-bloc">
-          <ImagePlus size={18} className="icone" aria-hidden /> Importer des photos
+          <ImagePlus size={18} className="icone" aria-hidden /> Importer des photos ou PDF
         </h2>
         <p className="texte-doux petit">
-          Choisis les photos d'un même cours (10 au plus). Révisio reconnaît la matière et le chapitre, range les notes
+          Choisis les photos ou les PDF d'un même cours (10 fichiers au plus). Révisio reconnaît la matière et le chapitre, range les notes
           dans le bon dossier et en fait une note par notion.
         </p>
         {extensions.length > 0 && (
@@ -198,7 +208,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
         )}
         <div className="rangee">
           <button className="bouton bouton-principal" disabled={!reglages.ecritureAutorisee || !pret || enCours} onClick={importer}>
-            <ImagePlus size={15} aria-hidden /> Choisir des photos…
+            <ImagePlus size={15} aria-hidden /> Choisir des photos ou PDF…
           </button>
           {enCours && tache && (
             <>
@@ -224,11 +234,9 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
               <li key={l.id}>
                 <div className="rangee entre">
                   <span>
-                    <strong>
-                      {l.photos.length} photo{l.photos.length > 1 ? "s" : ""}
-                    </strong>{" "}
+                    <strong>{decrireFichiers(l.photos)}</strong>{" "}
                     <span className="texte-doux petit">
-                      {l.source === "dossier" ? "du dossier surveillé" : "importées"}, {DATE.format(l.date)}
+                      {l.source === "dossier" ? "du dossier surveillé" : "import manuel"}, {DATE.format(l.date)}
                       {l.chapitre ? `, ${l.matiere} › ${l.chapitre}` : ""}
                       {l.modele ? `, par ${nomModele(l.modele)}` : ""}
                     </span>
@@ -240,7 +248,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
                   <button
                     className="bouton bouton-petit"
                     disabled={!reglages.ecritureAutorisee || !pret || enCours}
-                    onClick={() => traiter(`${l.photos.length} photo${l.photos.length > 1 ? "s" : ""}`, (id) => api.relancerLotPhotos(l.id, id))}
+                    onClick={() => traiter(decrireFichiers(l.photos), (id) => api.relancerLotPhotos(l.id, id))}
                   >
                     <RotateCcw size={14} aria-hidden /> Réessayer
                   </button>
@@ -361,9 +369,9 @@ export function DossierSurveille({
         <FolderSync size={18} className="icone" aria-hidden /> Dossier surveillé
       </h2>
       <p className="texte-doux petit">
-        Avec Google Drive pour ordinateur (ou OneDrive, Dropbox), envoie tes photos depuis ton téléphone dans un dossier :
-        tant que Révisio est ouvert, il regarde ce dossier toutes les 15 secondes et transforme les nouvelles photos en
-        notes. Les photos ne sont jamais supprimées.
+        Avec Google Drive pour ordinateur (ou OneDrive, Dropbox), envoie tes photos (ou tes PDF) depuis ton téléphone dans un
+        dossier : tant que Révisio est ouvert, il regarde ce dossier toutes les 15 secondes et transforme les nouveaux
+        fichiers en notes. Ils ne sont jamais supprimés.
       </p>
       {reglages.dossierPhotos ? (
         <>

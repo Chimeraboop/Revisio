@@ -589,7 +589,7 @@ pub async fn importer_photos(
         return Err(format!("{PHOTOS_PAR_LOT} photos au plus à la fois (celles d'un même cours)."));
     }
     if let Some(c) = chemins.iter().find(|c| !Path::new(c).is_file() || !est_une_photo(Path::new(c))) {
-        return Err(format!("Ce fichier n'est pas une photo (JPEG, PNG, WebP ou HEIC) : {c}"));
+        return Err(format!("Ce fichier n'est ni une photo (JPEG, PNG, WebP ou HEIC) ni un PDF : {c}"));
     }
     if !etat.reglages.lock().unwrap().ecriture_autorisee {
         return Err(ecriture::DESACTIVEE.into());
