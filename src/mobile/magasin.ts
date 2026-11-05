@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import type { Reglages, SensVocabulaire } from "../lib/api";
 import * as drive from "./drive";
 import { alleger, construire, journalVide, type Contenu, type Journal, type Modele } from "./donnees";
+import { auLancement, auRetour } from "./lancement";
 import { demanderPersistance, ecrire, lire } from "./stockage";
 
 const FICHIER_CONTENU = "contenu.json.gz";
@@ -18,7 +19,8 @@ export interface EtatMagasin {
   pret: boolean;
   modele: Modele | null;
   connecte: boolean;
-  synchro: { enCours: boolean; derniere: number | null; erreur: string | null; reconnecter: boolean };
+  /** `perime` : la connexion à Google a expiré, le contenu du PC n'a pas pu être vérifié (bouton « Synchroniser »). */
+  synchro: { enCours: boolean; derniere: number | null; erreur: string | null; reconnecter: boolean; perime: boolean };
   locaux: ReglagesLocaux;
 }
 
@@ -26,7 +28,7 @@ let etat: EtatMagasin = {
   pret: false,
   modele: null,
   connecte: false,
-  synchro: { enCours: false, derniere: null, erreur: null, reconnecter: false },
+  synchro: { enCours: false, derniere: null, erreur: null, reconnecter: false, perime: false },
   locaux: {},
 };
 let appareil = "";
@@ -131,7 +133,47 @@ export async function demarrer(): Promise<void> {
     locaux: locaux ?? {},
     synchro: { ...etat.synchro, erreur: erreurGoogle, reconnecter: !!erreurGoogle && connecte === false && !!contenu },
   });
-  if (connecte && navigator.onLine) void synchroniser({ silencieux: true });
+  const jetonValable = !!(await drive.jetonValable());
+  const decision = auLancement({
+    connecte,
+    enLigne: navigator.onLine,
+    jetonValable,
+    refusGoogle: !!erreurGoogle,
+    dernierRenouvellement: (await lire<number>("renouvellement-auto")) ?? null,
+    maintenant: Date.now(),
+  });
+  if (decision === "renouveler") {
+    // Connexion expirée (elle ne dure qu'une heure) : aller-retour chez Google sans rien demander, puis la page
+    // revient ici et se synchronise. Noté avant de partir, pour ne jamais boucler.
+    await ecrire("renouvellement-auto", Date.now());
+    changer({ synchro: { ...etat.synchro, enCours: true } });
+    drive.connecter(true);
+    return;
+  }
+  if (decision === "synchroniser") void synchroniser({ silencieux: true });
+  // Pas de renouvellement automatique (déjà essayé, ou hors ligne) : le bouton « Synchroniser » le propose.
+  if (decision === "attendre" && connecte && !jetonValable && !erreurGoogle) changer({ synchro: { ...etat.synchro, perime: true } });
+  if (!ecouteRetour) {
+    ecouteRetour = true;
+    document.addEventListener("visibilitychange", () => void auRetourDansLApp());
+  }
+}
+
+let ecouteRetour = false;
+
+/** L'app revient au premier plan (elle était en arrière-plan) : nouveautés du PC, sans jamais quitter la page. */
+async function auRetourDansLApp(): Promise<void> {
+  if (document.visibilityState !== "visible") return;
+  const decision = auRetour({
+    connecte: etat.connecte,
+    enLigne: navigator.onLine,
+    jetonValable: !!(await drive.jetonValable()),
+    derniere: etat.synchro.derniere,
+    enCours: etat.synchro.enCours,
+    maintenant: Date.now(),
+  });
+  if (decision === "synchroniser") void synchroniser({ silencieux: true });
+  if (decision === "signaler") changer({ synchro: { ...etat.synchro, perime: true } });
 }
 
 function nomAppareil(): string {
@@ -164,7 +206,7 @@ export async function synchroniser({ silencieux = false } = {}): Promise<void> {
   try {
     if (!(await drive.jetonValable())) {
       if (silencieux) {
-        changer({ synchro: { ...etat.synchro, enCours: false } });
+        changer({ synchro: { ...etat.synchro, enCours: false, perime: true } });
         return;
       }
       // Aller-retour chez Google (sans rien demander si l'élève y est encore connecté) : la page se recharge.
@@ -199,7 +241,7 @@ export async function synchroniser({ silencieux = false } = {}): Promise<void> {
     changer({
       modele: construire(contenu, journal),
       connecte: true,
-      synchro: { enCours: false, derniere: Date.now(), erreur: null, reconnecter: false },
+      synchro: { enCours: false, derniere: Date.now(), erreur: null, reconnecter: false, perime: false },
     });
   } catch (e) {
     const expire = e instanceof drive.JetonExpire;

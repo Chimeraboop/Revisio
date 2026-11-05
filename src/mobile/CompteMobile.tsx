@@ -15,6 +15,13 @@ export function ResumeSynchro() {
         Reconnecter Google
       </button>
     );
+  // Connexion à Google expirée pendant que l'app était ouverte : un appui la renouvelle et va chercher les nouveautés.
+  if (synchro.perime)
+    return (
+      <button className="lien-discret petit" onClick={() => synchroniser()}>
+        <RefreshCw size={13} aria-hidden /> Synchroniser
+      </button>
+    );
   return null;
 }
 
