@@ -238,3 +238,87 @@ body {
 .mobile .lecteur-edition {
   min-height: calc(100dvh - 160px);
 }
+
+/* Créer des notes : formulaire, envoi de photos, suivi des envois */
+.actions-notes-mobile {
+  display: flex;
+  gap: 8px;
+  margin: 0 16px 12px;
+}
+
+.actions-notes-mobile .bouton {
+  flex: 1;
+  justify-content: center;
+}
+
+.creer-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-inline: 16px;
+}
+
+.creer-mobile .retour-mobile {
+  margin-inline: 0;
+  align-self: flex-start;
+}
+
+.champ-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: var(--texte-doux);
+}
+
+/* 16 px au moins : en dessous, Safari zoome la page quand on touche un champ. */
+.champ-mobile input,
+.champ-mobile select,
+.champ-mobile textarea {
+  font-size: 16px;
+  color: var(--texte);
+}
+
+.cache-mobile {
+  display: none;
+}
+
+.fichiers-mobile,
+.depots-mobile {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.depots-mobile li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-petit);
+  background: var(--fond-panneau);
+}
+
+.depots-mobile li.probleme {
+  border-color: var(--erreur, var(--bordure));
+}
+
+.tourne-sans-fin {
+  animation: tourne-sans-fin 1s linear infinite;
+}
+
+@keyframes tourne-sans-fin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tourne-sans-fin {
+    animation: none;
+  }
+}

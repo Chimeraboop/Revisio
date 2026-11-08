@@ -1,9 +1,10 @@
 // Notes sur le téléphone : liste matière → chapitre → notes, puis lecture (et modification) d'une note.
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, Camera, ChevronRight, FilePlus2, Search } from "lucide-react";
 import LecteurNote from "../views/LecteurNote";
 import { arbre } from "./donnees";
 import { useMagasin } from "./magasin";
+import { DepotPhotos, NouvelleNote } from "./CreerMobile";
 
 interface Props {
   chemin: string | null;
@@ -15,6 +16,7 @@ export default function NotesMobile({ chemin, onOuvrir, ecritureAutorisee }: Pro
   const { modele } = useMagasin();
   const [ouverts, setOuverts] = useState<Set<string>>(new Set());
   const [filtre, setFiltre] = useState("");
+  const [creation, setCreation] = useState<"note" | "photos" | null>(null);
   const a = useMemo(() => (modele ? arbre(modele) : null), [modele]);
   // Une note ouverte (ou le retour à la liste) repart du haut de l'écran.
   useEffect(() => {
@@ -31,6 +33,18 @@ export default function NotesMobile({ chemin, onOuvrir, ecritureAutorisee }: Pro
       </div>
     );
   }
+  if (creation === "note") {
+    return (
+      <NouvelleNote
+        onRetour={() => setCreation(null)}
+        onCreee={(c) => {
+          setCreation(null);
+          onOuvrir(c);
+        }}
+      />
+    );
+  }
+  if (creation === "photos") return <DepotPhotos onRetour={() => setCreation(null)} />;
   if (!a) return null;
 
   const basculer = (k: string) =>
@@ -45,6 +59,14 @@ export default function NotesMobile({ chemin, onOuvrir, ecritureAutorisee }: Pro
 
   return (
     <div className="notes-mobile">
+      <div className="actions-notes-mobile">
+        <button className="bouton" onClick={() => setCreation("note")}>
+          <FilePlus2 size={16} aria-hidden /> Nouvelle note
+        </button>
+        <button className="bouton" onClick={() => setCreation("photos")}>
+          <Camera size={16} aria-hidden /> Photos de cours
+        </button>
+      </div>
       <label className="recherche-mobile">
         <Search size={16} aria-hidden />
         <input type="search" placeholder="Chercher une note" value={filtre} onChange={(e) => setFiltre(e.target.value)} />

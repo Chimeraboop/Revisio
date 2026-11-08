@@ -111,6 +111,16 @@ export interface Contenu {
   notes: NoteSynchro[];
   /** Modifications de notes déjà traitées par le PC : `appareil|chemin|date`. */
   notesTraitees: string[];
+  /** Photos de cours envoyées par ce téléphone (ou un autre) et ce que le PC en a fait. Absent des anciens contenus. */
+  depots?: DepotSynchro[];
+}
+
+export interface DepotSynchro {
+  id: string;
+  /** Statut du lot de photos sur le PC : attente, en_cours, termine, illisible ou erreur. */
+  statut: string;
+  message: string | null;
+  date: number;
 }
 
 export interface EtatSynchro {
@@ -248,6 +258,7 @@ export function construire(contenu: Contenu, journal: Journal): Modele {
   for (const m of journal.notes) {
     const n = notes.get(m.chemin);
     if (n) notes.set(m.chemin, { ...n, contenu: m.contenu });
+    else if (m.base === "") notes.set(m.chemin, noteNouvelle(m.chemin, m.contenu));
   }
   return { contenu, journal, cartes, parId, parCle, revisions, erreurs, notes };
 }
@@ -630,13 +641,78 @@ export function resoudre(m: Modele, cible: string, source: string | null): { che
   return { chemin: (memeDossier ?? candidats[0]).chemin, genre: "note" };
 }
 
+/** Note créée sur le téléphone, telle que le téléphone la voit avant que le PC l'ait écrite. */
+export function noteNouvelle(chemin: string, contenu: string): NoteSynchro {
+  const parties = chemin.split("/");
+  const nom = (parties.pop() ?? chemin).replace(/\.md$/i, "");
+  return {
+    chemin,
+    nom,
+    titre: nom,
+    matiere: parties[0] ?? null,
+    chapitre: parties.length > 1 ? parties[1] : null,
+    genre: "cours",
+    tags: [],
+    frontmatter: null,
+    contenu,
+    empreinte: "",
+  };
+}
+
+/** Caractères que le PC refuserait dans un nom de fichier (ou qui casseraient un lien [[…]]). */
+export function nomDeNoteSur(titre: string): string {
+  return titre
+    .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/, "")
+    .slice(0, 100);
+}
+
+/** Dossiers où l'on peut ranger une note (ceux des notes connues), du plus court au plus long. */
+export function dossiersDeNotes(m: Modele): string[] {
+  const dossiers = new Set<string>();
+  for (const chemin of m.notes.keys()) {
+    const parties = chemin.split("/").slice(0, -1);
+    for (let i = 1; i <= parties.length; i++) dossiers.add(parties.slice(0, i).join("/"));
+  }
+  return [...dossiers].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+/** Note créée sur le téléphone : le PC l'écrira dans le dossier de notes (sans jamais remplacer un fichier existant). */
+export function creerNote(m: Modele, dossier: string, titre: string, corps: string, maintenant: number): { journal: Journal; chemin: string } {
+  const nom = nomDeNoteSur(titre);
+  if (!nom) throw new Error("Donne un titre à la note.");
+  const dossierPropre = dossier
+    .split("/")
+    .map(nomDeNoteSur)
+    .filter(Boolean)
+    .join("/");
+  const chemin = `${dossierPropre ? `${dossierPropre}/` : ""}${nom}.md`;
+  if ([...m.notes.keys()].some((k) => k.toLowerCase() === chemin.toLowerCase())) {
+    throw new Error("Une note porte déjà ce nom dans ce dossier : choisis un autre titre.");
+  }
+  const d = new Date(maintenant);
+  const p = (n: number) => String(n).padStart(2, "0");
+  const cree = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  const contenu = `---\ncreated: ${cree}\n---\n\n${corps.replace(/\r\n/g, "\n").trim()}\n`;
+  return { journal: { ...m.journal, notes: [...m.journal.notes, { chemin, base: "", contenu, date: maintenant }] }, chemin };
+}
+
 /** Note modifiée sur le téléphone (le PC l'écrira, ou la proposera si elle a aussi changé sur le PC). */
 export function enregistrerNote(m: Modele, chemin: string, contenu: string, avant: string, maintenant: number): Journal {
   const n = m.notes.get(chemin);
   const origine = m.contenu.notes.find((x) => x.chemin === chemin);
-  if (!n || !origine) throw new Error(`Note introuvable : ${chemin}`);
+  if (!n) throw new Error(`Note introuvable : ${chemin}`);
   const sansCr = (t: string) => t.replace(/\r\n/g, "\n");
   if (sansCr(n.contenu) !== sansCr(avant)) throw new Error("La note a changé entre-temps : recharge-la avant de la modifier.");
+  if (!origine) {
+    // Note créée sur ce téléphone et pas encore écrite par le PC : on remplace simplement son texte.
+    const creation = m.journal.notes.find((x) => x.chemin === chemin && x.base === "");
+    if (!creation) throw new Error(`Note introuvable : ${chemin}`);
+    const autres = m.journal.notes.filter((x) => x !== creation);
+    return { ...m.journal, notes: [...autres, { ...creation, contenu: sansCr(contenu), date: maintenant }] };
+  }
   // Les retours à la ligne de la note d'origine (« \r\n » sous Windows) sont gardés.
   const texte = origine.contenu.includes("\r\n") ? sansCr(contenu).replace(/\n/g, "\r\n") : sansCr(contenu);
   const autres = m.journal.notes.filter((x) => x.chemin !== chemin);

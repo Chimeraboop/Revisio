@@ -138,6 +138,14 @@ export async function envoyer(nom: string, existant: string | null, octets: Uint
   await requete(`${ENVOI}?uploadType=multipart`, { method: "POST", body: corps });
 }
 
+/** Crée un fichier (photo, PDF, petit fichier JSON…) dans le dossier caché. */
+export async function envoyerFichier(nom: string, contenu: Blob): Promise<void> {
+  const corps = new FormData();
+  corps.append("metadata", new Blob([JSON.stringify({ name: nom, parents: ["appDataFolder"] })], { type: "application/json" }));
+  corps.append("file", contenu);
+  await requete(`${ENVOI}?uploadType=multipart`, { method: "POST", body: corps });
+}
+
 // ---------- Compression (fichiers .json.gz, comme ceux du PC) ----------
 
 async function transformer(octets: Uint8Array<ArrayBuffer>, flux: CompressionStream | DecompressionStream): Promise<Uint8Array<ArrayBuffer>> {

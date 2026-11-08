@@ -542,7 +542,61 @@ pub fn demarrer_surveillance(app: AppHandle) {
         loop {
             tokio::time::sleep(INTERVALLE).await;
             verifier_dossier(&app).await;
+            traiter_depots(&app).await;
         }
+    });
+}
+
+/// Ce qui empêche de traiter des photos maintenant (réglage, clé, mode local…), ou `None`.
+fn empechement_traitement(etat: &Etat) -> Option<String> {
+    let (vault_choisi, autorisee, extension) = {
+        let r = etat.reglages.lock().unwrap();
+        (r.chemin_vault.is_some(), r.ecriture_autorisee, r.extension_photos.clone())
+    };
+    if !vault_choisi {
+        Some("Aucun vault choisi.".into())
+    } else if !autorisee {
+        Some("L'écriture dans le vault est désactivée : les photos attendent.".into())
+    } else if etat.ia.gemini_coupe() {
+        Some("Mode local : les photos seront traitées en repassant en ligne.".into())
+    } else if let Some(id) = extension.as_deref().filter(|id| extensions::trouver(&etat.dossier, id, "photos").is_none()) {
+        Some(format!("L'extension « {id} » n'est plus installée : les photos attendent."))
+    } else if extension.is_none() && !etat.ia.cle_presente() {
+        Some("Aucune clé Gemini : les photos attendent.".into())
+    } else {
+        None
+    }
+}
+
+/// Lots de photos envoyés par le téléphone et pas encore traités : un par un, quand rien ne l'empêche.
+async fn traiter_depots(app: &AppHandle) {
+    let etat = app.state::<Etat>();
+    if etat.photos.lock().unwrap().etat.en_cours {
+        return;
+    }
+    let a_faire: Vec<i64> = {
+        let conn = etat.db.lock().unwrap();
+        let Ok(mut req) = conn.prepare("SELECT id FROM lots_photos WHERE source = 'telephone' AND statut = 'attente' ORDER BY id") else {
+            return;
+        };
+        let Ok(lignes) = req.query_map([], |r| r.get(0)) else { return };
+        lignes.flatten().collect()
+    };
+    if a_faire.is_empty() || empechement_traitement(&etat).is_some() || !etat.ia.internet_joignable().await {
+        return;
+    }
+    noter(app, |e| {
+        e.en_cours = true;
+        e.message = Some("Traitement des photos envoyées par le téléphone…".into());
+    });
+    for id in a_faire {
+        if let Ok(lot) = traiter_lot(etat.inner(), id).await {
+            let _ = app.emit("photos-lot", lot);
+        }
+    }
+    noter(app, |e| {
+        e.en_cours = false;
+        e.message = None;
     });
 }
 
@@ -558,10 +612,7 @@ fn noter(app: &AppHandle, modif: impl FnOnce(&mut EtatSurveillance)) {
 
 async fn verifier_dossier(app: &AppHandle) {
     let etat = app.state::<Etat>();
-    let (dossier, autorisee, vault_choisi, extension) = {
-        let r = etat.reglages.lock().unwrap();
-        (r.dossier_photos.clone(), r.ecriture_autorisee, r.chemin_vault.is_some(), r.extension_photos.clone())
-    };
+    let dossier = etat.reglages.lock().unwrap().dossier_photos.clone();
     let Some(dossier) = dossier else { return };
     if etat.photos.lock().unwrap().etat.en_cours {
         return;
@@ -588,18 +639,8 @@ async fn verifier_dossier(app: &AppHandle) {
     let calme = dernier_arrivage.map(|d| maintenant.duration_since(d) >= CALME).unwrap_or(true);
     let empechement = if !dossier.is_dir() {
         Some("Dossier introuvable (Google Drive est-il lancé ?).".to_string())
-    } else if !vault_choisi {
-        Some("Aucun vault choisi.".into())
-    } else if !autorisee {
-        Some("L'écriture dans le vault est désactivée : les photos attendent.".into())
-    } else if etat.ia.gemini_coupe() {
-        Some("Mode local : les photos seront traitées en repassant en ligne.".into())
-    } else if let Some(id) = extension.as_deref().filter(|id| extensions::trouver(&etat.dossier, id, "photos").is_none()) {
-        Some(format!("L'extension « {id} » n'est plus installée : les photos attendent."))
-    } else if extension.is_none() && !etat.ia.cle_presente() {
-        Some("Aucune clé Gemini : les photos attendent.".into())
     } else {
-        None
+        empechement_traitement(&etat)
     };
     noter(app, |e| {
         e.dossier = Some(dossier.to_string_lossy().into_owned());

@@ -236,7 +236,7 @@ export default function PhotosVue({ reglages, onReglages, onOuvrirNote, onAllerA
                   <span>
                     <strong>{decrireFichiers(l.photos)}</strong>{" "}
                     <span className="texte-doux petit">
-                      {l.source === "dossier" ? "du dossier surveillé" : "import manuel"}, {DATE.format(l.date)}
+                      {l.source === "dossier" ? "du dossier surveillé" : l.source === "telephone" ? "envoyées par le téléphone" : "import manuel"}, {DATE.format(l.date)}
                       {l.chapitre ? `, ${l.matiere} › ${l.chapitre}` : ""}
                       {l.modele ? `, par ${nomModele(l.modele)}` : ""}
                     </span>

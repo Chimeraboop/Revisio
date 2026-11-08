@@ -4,7 +4,10 @@ import {
   arbre,
   carnet,
   construire,
+  creerNote,
+  dossiersDeNotes,
   enregistrerNote,
+  nomDeNoteSur,
   enregistrerRevision,
   journalVide,
   marquerComprise,
@@ -186,6 +189,38 @@ describe("notes sur le téléphone", () => {
     expect(() => enregistrerNote(m2, "SVT/Méiose/La méiose.md", "autre", "Voir [[Mitose]].\nFin", 6)).toThrow();
     // Retour au texte d'origine : plus rien à envoyer.
     expect(enregistrerNote(m2, "SVT/Méiose/La méiose.md", "Voir [[Mitose]].\nFin", "Voir [[Mitose]].\nFin\nAjout", 7).notes).toEqual([]);
+  });
+});
+
+describe("notes créées sur le téléphone", () => {
+  it("nom sûr, dossiers connus, note visible tout de suite", () => {
+    expect(nomDeNoteSur(' Q/R : "bilan" #1 [x]. ')).toBe("Q R bilan 1 x");
+    const m = construire(contenu(), journalVide("iphone-1"));
+    expect(dossiersDeNotes(m)).toEqual(expect.arrayContaining(["SVT", "SVT/Méiose", "SVT/Mitose"]));
+    const { journal, chemin } = creerNote(m, "SVT/Mitose", "Les phases", "Prophase\n**Métaphase**", MAINTENANT);
+    expect(chemin).toBe("SVT/Mitose/Les phases.md");
+    expect(journal.notes).toHaveLength(1);
+    expect(journal.notes[0]).toMatchObject({ chemin, base: "" });
+    expect(journal.notes[0].contenu).toMatch(/^---\ncreated: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}\n---\n\nProphase/);
+    const m2 = construire(m.contenu, journal);
+    expect(m2.notes.get(chemin)).toMatchObject({ titre: "Les phases", matiere: "SVT", chapitre: "Mitose" });
+    expect(arbre(m2).matieres.find((x) => x.nom === "SVT")!.chapitres.find((c) => c.nom === "Mitose")!.notes.map((n) => n.titre)).toContain("Les phases");
+    // Même nom (casse ignorée) : refusé. Titre vide : refusé.
+    expect(() => creerNote(m2, "SVT/Mitose", "les PHASES", "x", MAINTENANT)).toThrow(/déjà/);
+    expect(() => creerNote(m, "SVT", "  ", "x", MAINTENANT)).toThrow();
+    // Retouchée avant que le PC l'ait écrite : le texte de la création est remplacé, pas de seconde entrée.
+    const j2 = enregistrerNote(m2, chemin, "Nouveau texte", journal.notes[0].contenu, MAINTENANT + 1);
+    expect(j2.notes).toHaveLength(1);
+    expect(j2.notes[0]).toMatchObject({ chemin, base: "", contenu: "Nouveau texte" });
+    // Le PC l'a écrite : le journal l'oublie.
+    const c2 = contenu();
+    c2.notes.push({ ...m2.notes.get(chemin)!, empreinte: "x" });
+    expect(alleger(journal, c2).notes).toEqual([]);
+  });
+
+  it("dossier neuf : les dossiers parents sont créés par le PC", () => {
+    const m = construire(contenu(), journalVide("iphone-1"));
+    expect(creerNote(m, "Histoire-Géo / Chapitre 3", "Vienne", "x", MAINTENANT).chemin).toBe("Histoire-Géo/Chapitre 3/Vienne.md");
   });
 });
 

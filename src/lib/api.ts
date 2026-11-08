@@ -83,7 +83,7 @@ export interface BilanCartesIa {
 export interface LotPhotos {
   id: number;
   date: number;
-  source: "import" | "dossier";
+  source: "import" | "dossier" | "telephone";
   photos: string[];
   statut: "attente" | "en_cours" | "termine" | "illisible" | "erreur";
   matiere: string | null;

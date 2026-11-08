@@ -74,6 +74,20 @@ pub struct Contenu {
     /// Modifications de notes venues d'autres appareils déjà traitées (écrites ou proposées) :
     /// `appareil|chemin|date`. Le téléphone peut les oublier.
     pub notes_traitees: Vec<String>,
+    /// Photos de cours envoyées par le téléphone et ce que le PC en a fait (les 10 derniers dépôts).
+    #[serde(default)]
+    pub depots: Vec<DepotSynchro>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DepotSynchro {
+    /// Identifiant choisi par le téléphone (`appareil_date`).
+    pub id: String,
+    /// `attente`, `en_cours`, `termine`, `illisible` ou `erreur` (statut du lot de photos).
+    pub statut: String,
+    pub message: Option<String>,
+    pub date: i64,
 }
 
 /// Réglages utiles aux séances sur le téléphone.
@@ -307,6 +321,24 @@ pub fn exporter(conn: &Connection, reglages: &Reglages, racine: Option<&Path>, m
         }
     }
 
+    let depots = conn
+        .prepare("SELECT photos, statut, message, date FROM lots_photos WHERE source = 'telephone' ORDER BY id DESC LIMIT 10")
+        .map_err(e)?
+        .query_map([], |r| {
+            let photos: String = r.get(0)?;
+            Ok((photos, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, i64>(3)?))
+        })
+        .map_err(e)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(e)?
+        .into_iter()
+        .filter_map(|(photos, statut, message, date)| {
+            let photos: Vec<String> = serde_json::from_str(&photos).unwrap_or_default();
+            let id = Path::new(photos.first()?).parent()?.file_name()?.to_string_lossy().into_owned();
+            Some(DepotSynchro { id, statut, message, date })
+        })
+        .collect();
+
     Ok(Contenu {
         version: VERSION_FORMAT,
         appareil: id,
@@ -324,6 +356,7 @@ pub fn exporter(conn: &Connection, reglages: &Reglages, racine: Option<&Path>, m
             .map_err(e)?
             .collect::<rusqlite::Result<_>>()
             .map_err(e)?,
+        depots,
     })
 }
 
@@ -498,6 +531,12 @@ pub fn importer(conn: &mut Connection, journal: &Journal, ecriture: Option<&ecri
         let actuel = vault::lire_octets(ctx.racine, &n.chemin).ok();
         if actuel.as_deref() == Some(n.contenu.as_bytes()) {
             // Déjà identique (synchronisation précédente interrompue après l'écriture).
+        } else if actuel.is_none() && n.base.is_empty() {
+            // Note créée sur le téléphone. Un nom refusé (caractère interdit…) ne doit pas bloquer la synchronisation.
+            match ecriture::creer(conn, ctx, &n.chemin, &n.contenu) {
+                Ok(_) => bilan.notes_ecrites += 1,
+                Err(_) => bilan.ignorees += 1,
+            }
         } else if actuel.as_ref().map(|o| empreinte(o)) == Some(n.base.clone()) {
             ecriture::modifier(conn, ctx, &n.chemin, &n.contenu, &|o| empreinte(o) == n.base)?;
             bilan.notes_ecrites += 1;
@@ -592,6 +631,9 @@ pub struct Rapport {
     pub notes_ecrites: usize,
     pub notes_a_valider: usize,
     pub notes_en_attente: usize,
+    /// Dépôts de photos reçus du téléphone (traités ensuite par l'IA, en arrière-plan).
+    #[serde(default)]
+    pub depots: usize,
     /// Le contenu du PC a été envoyé (il avait changé).
     pub envoye: bool,
     /// Taille du contenu compressé, en octets.
@@ -661,6 +703,9 @@ async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
         }
     }
 
+    // 1 bis. Photos de cours déposées par le téléphone : copiées ici, le traitement par l'IA vient ensuite.
+    rapport.depots = recevoir_depots(etat, &fichiers).await?;
+
     // 2. Contenu du PC, envoyé seulement s'il a changé depuis le dernier envoi.
     let octets = {
         let reglages = etat.reglages.lock().unwrap().clone();
@@ -688,9 +733,114 @@ async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
     Ok(rapport)
 }
 
+// ---------- Photos de cours déposées par le téléphone ----------
+
+/// Un dépôt = des fichiers `depot-<id>_<rang>.<ext>` puis, en dernier, `depot-<id>.json` ({"n": nombre}).
+/// Le PC ne s'en occupe que lorsque le fichier de fin est là et que toutes les photos sont arrivées.
+const PREFIXE_DEPOT: &str = "depot-";
+
+/// Identifiant de dépôt sûr (il devient un nom de dossier sur le PC).
+fn id_depot_valide(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// (rang, extension) d'une photo `depot-<id>_<rang>.<ext>`.
+fn rang_et_extension(nom: &str, id: &str) -> Option<(usize, String)> {
+    let reste = nom.strip_prefix(PREFIXE_DEPOT)?.strip_prefix(id)?.strip_prefix('_')?;
+    let (rang, ext) = reste.split_once('.')?;
+    let ext = ext.to_ascii_lowercase();
+    matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "webp" | "pdf").then_some(())?;
+    Some((rang.parse().ok()?, ext))
+}
+
+async fn recevoir_depots(etat: &crate::Etat, fichiers: &[crate::google::FichierDrive]) -> Result<usize, String> {
+    let mut recus = 0;
+    for fin in fichiers.iter().filter(|f| f.name.starts_with(PREFIXE_DEPOT) && f.name.ends_with(".json")) {
+        let id = &fin.name[PREFIXE_DEPOT.len()..fin.name.len() - ".json".len()];
+        if !id_depot_valide(id) {
+            continue;
+        }
+        let cle = format!("depot_recu:{id}");
+        let deja = db::lire_meta(&etat.db.lock().unwrap(), &cle).is_some();
+        let mut photos: Vec<(usize, String, &crate::google::FichierDrive)> = fichiers
+            .iter()
+            .filter_map(|f| rang_et_extension(&f.name, id).map(|(r, e)| (r, e, f)))
+            .collect();
+        photos.sort_by_key(|(r, _, _)| *r);
+        if !deja {
+            let meta: Value = serde_json::from_slice(&etat.google.telecharger(&fin.id).await?).unwrap_or(Value::Null);
+            let attendu = meta.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+            if attendu == 0 || photos.len() < attendu {
+                continue; // des photos manquent encore : prochaine synchronisation
+            }
+            photos.truncate(crate::ia::photos::PHOTOS_PAR_LOT);
+            let dossier = etat.dossier.join("depot-telephone").join(id);
+            std::fs::create_dir_all(&dossier).map_err(|e| format!("Dossier des photos du téléphone : {e}"))?;
+            let mut chemins = Vec::new();
+            for (rang, ext, f) in &photos {
+                let octets = etat.google.telecharger(&f.id).await?;
+                let chemin = dossier.join(format!("{rang:02}.{ext}"));
+                std::fs::write(&chemin, octets).map_err(|e| format!("Photo du téléphone : {e}"))?;
+                chemins.push(chemin.to_string_lossy().into_owned());
+            }
+            let conn = etat.db.lock().unwrap();
+            crate::photos::creer_lot(&conn, "telephone", &chemins, crate::maintenant_ms()).map_err(|e| e.to_string())?;
+            db::ecrire_meta(&conn, &cle, "1").map_err(|e| e.to_string())?;
+            recus += 1;
+        }
+        // Les copies sont ici : le Drive est nettoyé (une erreur de suppression sera réessayée au prochain passage).
+        for (_, _, f) in &photos {
+            let _ = etat.google.supprimer(&f.id).await;
+        }
+        let _ = etat.google.supprimer(&fin.id).await;
+    }
+    Ok(recus)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn depots_noms_et_identifiants() {
+        assert!(id_depot_valide("iphone-123_1731100000000"));
+        assert!(!id_depot_valide("../x"));
+        assert!(!id_depot_valide("a b"));
+        assert!(!id_depot_valide(""));
+        assert_eq!(rang_et_extension("depot-iphone-1_17_2.jpg", "iphone-1_17"), Some((2, "jpg".into())));
+        assert_eq!(rang_et_extension("depot-iphone-1_17_1.PDF", "iphone-1_17"), Some((1, "pdf".into())));
+        assert_eq!(rang_et_extension("depot-iphone-1_17_1.exe", "iphone-1_17"), None);
+        assert_eq!(rang_et_extension("depot-iphone-1_17.json", "iphone-1_17"), None);
+        // Un autre dépôt dont l'identifiant commence pareil n'est pas confondu.
+        assert_eq!(rang_et_extension("depot-iphone-1_170_1.jpg", "iphone-1_17"), None);
+    }
+
+    #[test]
+    fn note_creee_sur_le_telephone() {
+        let racine = std::env::temp_dir().join(format!("revisio-nouvelle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&racine);
+        std::fs::create_dir_all(&racine).unwrap();
+        let mut conn = base();
+        let ctx = ecriture::Contexte { racine: &racine, autorisee: true, origine: "appareil", lot_id: None, raison: None, maintenant: 3000, groupe: None };
+        let mut j = journal();
+        j.notes = vec![
+            NoteModifiee { chemin: "Histoire/Chap 1/Nouvelle.md".into(), base: String::new(), contenu: "# Nouvelle".into(), date: 20 },
+            NoteModifiee { chemin: "../dehors.md".into(), base: String::new(), contenu: "non".into(), date: 21 },
+        ];
+        let b = importer(&mut conn, &j, Some(&ctx)).unwrap();
+        assert_eq!((b.notes_ecrites, b.ignorees), (1, 1));
+        assert_eq!(std::fs::read_to_string(racine.join("Histoire/Chap 1/Nouvelle.md")).unwrap(), "# Nouvelle");
+        assert!(!racine.parent().unwrap().join("dehors.md").exists());
+        // Rejouée : rien de plus.
+        assert_eq!(importer(&mut conn, &j, Some(&ctx)).unwrap().notes_ecrites, 0);
+        // Un fichier du même nom est apparu entre-temps sur le PC : proposé, jamais écrasé.
+        std::fs::write(racine.join("Histoire/Chap 1/Autre.md"), "version PC").unwrap();
+        j.notes = vec![NoteModifiee { chemin: "Histoire/Chap 1/Autre.md".into(), base: String::new(), contenu: "version téléphone".into(), date: 30 }];
+        let b = importer(&mut conn, &j, Some(&ctx)).unwrap();
+        assert_eq!((b.notes_ecrites, b.notes_a_valider), (0, 1));
+        assert_eq!(std::fs::read_to_string(racine.join("Histoire/Chap 1/Autre.md")).unwrap(), "version PC");
+        let _ = std::fs::remove_dir_all(&racine);
+    }
 
     /// Essai lancé à la main : un journal produit par la web-app (REVISIO_ESSAI_JOURNAL) fusionné dans une
     /// copie de base (REVISIO_ESSAI_DB). `cargo test -- --ignored essai_journal_web --nocapture`

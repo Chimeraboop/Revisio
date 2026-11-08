@@ -3,7 +3,8 @@
 import { useSyncExternalStore } from "react";
 import type { Reglages, SensVocabulaire } from "../lib/api";
 import * as drive from "./drive";
-import { alleger, construire, journalVide, type Contenu, type Journal, type Modele } from "./donnees";
+import { alleger, construire, creerNote, journalVide, type Contenu, type Journal, type Modele } from "./donnees";
+import { FICHIERS_MAX, idDepot, nomFichierDepot, nomFinDepot, preparerFichier } from "./depot";
 import { auLancement, auRetour } from "./lancement";
 import { demanderPersistance, ecrire, lire } from "./stockage";
 
@@ -254,6 +255,47 @@ export async function synchroniser({ silencieux = false } = {}): Promise<void> {
       },
     });
   }
+}
+
+/** Note écrite sur le téléphone : gardée tout de suite, le PC l'ajoute à son dossier de notes à la synchronisation. */
+export async function creerNoteMobile(dossier: string, titre: string, corps: string): Promise<string> {
+  const m = etat.modele;
+  if (!m) throw new Error("Aucune donnée : synchronise d'abord avec ton Google Drive.");
+  const { journal, chemin } = creerNote(m, dossier, titre, corps, Date.now());
+  await appliquer(journal);
+  return chemin;
+}
+
+export interface DepotLocal {
+  id: string;
+  date: number;
+  n: number;
+}
+
+/** Derniers dépôts de photos faits depuis ce téléphone. */
+export async function depotsLocaux(): Promise<DepotLocal[]> {
+  return (await lire<DepotLocal[]>("depots-locaux")) ?? [];
+}
+
+/**
+ * Envoie des photos ou PDF de cours au PC (par le Drive) : le PC les transforme en notes avec l'IA et les renvoie.
+ * Les fichiers partent un par un, le fichier de fin en dernier.
+ */
+export async function deposerPhotos(fichiers: File[], progression: (fait: number, total: number) => void): Promise<DepotLocal> {
+  if (!fichiers.length) throw new Error("Choisis au moins une photo.");
+  if (fichiers.length > FICHIERS_MAX) throw new Error(`${FICHIERS_MAX} fichiers au plus à la fois (ceux d'un même cours).`);
+  if (!(await drive.jetonValable())) throw new Error("Reconnecte ton compte Google (onglet Synchro), puis réessaie.");
+  const id = idDepot(appareil, Date.now());
+  progression(0, fichiers.length);
+  for (let i = 0; i < fichiers.length; i++) {
+    const { blob, ext } = await preparerFichier(fichiers[i]);
+    await drive.envoyerFichier(nomFichierDepot(id, i + 1, ext), blob);
+    progression(i + 1, fichiers.length);
+  }
+  await drive.envoyerFichier(nomFinDepot(id), new Blob([JSON.stringify({ n: fichiers.length })], { type: "application/json" }));
+  const depot: DepotLocal = { id, date: Date.now(), n: fichiers.length };
+  await ecrire("depots-locaux", [depot, ...(await depotsLocaux())].slice(0, 10));
+  return depot;
 }
 
 export async function seDeconnecter(): Promise<void> {
