@@ -222,6 +222,14 @@ export async function synchroniser({ silencieux = false } = {}): Promise<void> {
       await ecrire("contenu", contenu);
       await ecrire("contenu-version", distant.modifiedTime);
     }
+    if (contenu?.depots?.length) {
+      const locaux = await depotsLocaux();
+      const maj = locaux.map((d) => {
+        const p = contenu!.depots!.find((x) => x.id === d.id);
+        return p ? { ...d, pc: { statut: p.statut, message: p.message } } : d;
+      });
+      await ecrire("depots-locaux", maj);
+    }
     if (!contenu) throw new Error("Rien à recevoir pour l'instant : ouvre Révisio sur ton PC et connecte-le à ton Google Drive (Réglages).");
     const avant = (await lire<Journal>("journal")) ?? journalVide(appareil, nomAppareil());
     let journal = alleger(avant, contenu);
@@ -270,6 +278,8 @@ export interface DepotLocal {
   id: string;
   date: number;
   n: number;
+  /** Dernier état publié par un PC (gardé : avec deux ordinateurs, le contenu reçu peut venir de l'autre). */
+  pc?: { statut: string; message: string | null };
 }
 
 /** Derniers dépôts de photos faits depuis ce téléphone. */

@@ -107,6 +107,13 @@ export interface RapportSynchro {
   envoye: boolean;
   taille: number;
   erreur: string | null;
+  /** Venus d'un autre ordinateur (absents des anciens comptes rendus). */
+  notesRecues?: number;
+  notesSupprimees?: number;
+  suppressionsRefusees?: number;
+  cartes?: number;
+  evaluations?: number;
+  envoyePc?: boolean;
 }
 
 export interface EtatSynchro {

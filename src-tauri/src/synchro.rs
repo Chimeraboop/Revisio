@@ -197,43 +197,44 @@ pub struct NoteSynchro {
     pub empreinte: String,
 }
 
+/// Cartes qui vérifient `condition` (fragment SQL sur la table `cartes`).
+pub(crate) fn lire_cartes(conn: &Connection, condition: &str) -> rusqlite::Result<Vec<CarteSynchro>> {
+    conn.prepare(&format!(
+        "SELECT cle, genre, note_chemin, matiere, chapitre, section, question, reponse, donnees, extrait,
+                suspendue, creee_le, etat_fsrs, echeance, introduite_le, etat_maj
+         FROM cartes WHERE {condition} ORDER BY id"
+    ))?
+    .query_map([], |r| {
+        let donnees: String = r.get(8)?;
+        Ok(CarteSynchro {
+            cle: r.get(0)?,
+            genre: r.get(1)?,
+            note_chemin: r.get(2)?,
+            matiere: r.get(3)?,
+            chapitre: r.get(4)?,
+            section: r.get(5)?,
+            question: r.get(6)?,
+            reponse: r.get(7)?,
+            donnees: serde_json::from_str(&donnees).unwrap_or(Value::Object(Default::default())),
+            extrait: r.get(9)?,
+            suspendue: r.get(10)?,
+            creee_le: r.get(11)?,
+            etat_fsrs: r.get(12)?,
+            echeance: r.get(13)?,
+            introduite_le: r.get(14)?,
+            etat_maj: r.get(15)?,
+        })
+    })?
+    .collect()
+}
+
 /// Tout ce que le téléphone doit savoir. `racine` absente (aucun dossier de notes) : pas de notes.
 pub fn exporter(conn: &Connection, reglages: &Reglages, racine: Option<&Path>, maintenant: i64) -> Result<Contenu, String> {
     let e = |e: rusqlite::Error| e.to_string();
     let id = appareil(conn);
     assurer_uids(conn, &id).map_err(e)?;
 
-    let cartes = conn
-        .prepare(
-            "SELECT cle, genre, note_chemin, matiere, chapitre, section, question, reponse, donnees, extrait,
-                    suspendue, creee_le, etat_fsrs, echeance, introduite_le, etat_maj
-             FROM cartes WHERE active = 1 ORDER BY id",
-        )
-        .map_err(e)?
-        .query_map([], |r| {
-            let donnees: String = r.get(8)?;
-            Ok(CarteSynchro {
-                cle: r.get(0)?,
-                genre: r.get(1)?,
-                note_chemin: r.get(2)?,
-                matiere: r.get(3)?,
-                chapitre: r.get(4)?,
-                section: r.get(5)?,
-                question: r.get(6)?,
-                reponse: r.get(7)?,
-                donnees: serde_json::from_str(&donnees).unwrap_or(Value::Object(Default::default())),
-                extrait: r.get(9)?,
-                suspendue: r.get(10)?,
-                creee_le: r.get(11)?,
-                etat_fsrs: r.get(12)?,
-                echeance: r.get(13)?,
-                introduite_le: r.get(14)?,
-                etat_maj: r.get(15)?,
-            })
-        })
-        .map_err(e)?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(e)?;
+    let cartes = lire_cartes(conn, "active = 1").map_err(e)?;
 
     let depuis = maintenant - JOURS_REVISIONS * 24 * 3600 * 1000;
     let revisions = conn
@@ -375,6 +376,18 @@ pub struct Journal {
     pub comprises: Vec<Comprise>,
     pub suspendues: Vec<String>,
     pub notes: Vec<NoteModifiee>,
+    /// Le reste n'est rempli que par un ordinateur (synchronisation entre PC, voir `synchro_pc`).
+    pub pc: bool,
+    /// Cartes rédigées par l'IA (ou importées), inconnues de l'indexation des autres PC.
+    pub cartes: Vec<CarteSynchro>,
+    /// Cartes retirées (textes à trous remplacés par l'IA…) qui ont des révisions : gardées pour les statistiques.
+    pub cartes_retirees: Vec<CarteSynchro>,
+    pub notes_ia: Vec<crate::synchro_pc::NoteIa>,
+    pub evaluations: Vec<crate::synchro_pc::EvaluationSynchro>,
+    pub evaluations_supprimees: Vec<crate::synchro_pc::Suppression>,
+    pub fichiers: Vec<crate::synchro_pc::FichierNote>,
+    /// Le dossier de notes a été lu en entier : une note absente a vraiment été supprimée.
+    pub fichiers_complets: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -433,6 +446,13 @@ pub struct Bilan {
     pub notes_en_attente: usize,
     /// Cartes inconnues ici (note supprimée entre-temps…).
     pub ignorees: usize,
+    /// Synchronisation entre ordinateurs.
+    pub cartes: usize,
+    pub evaluations: usize,
+    pub notes_recues: usize,
+    pub notes_supprimees: usize,
+    /// Trop de notes supprimées d'un coup sur l'autre PC : laissées ici par prudence.
+    pub suppressions_refusees: usize,
 }
 
 /// Clé actuelle d'une carte (une note renommée a changé la clé de ses cartes).
@@ -464,6 +484,9 @@ pub fn importer(conn: &mut Connection, journal: &Journal, ecriture: Option<&ecri
     let e = |e: rusqlite::Error| e.to_string();
     let mut bilan = Bilan::default();
     let tx = conn.transaction().map_err(e)?;
+    if journal.pc {
+        crate::synchro_pc::importer_donnees(&tx, journal, &mut bilan).map_err(e)?;
+    }
 
     for r in &journal.revisions {
         let Some(id) = carte_id(&tx, &r.cle).map_err(e)? else {
@@ -483,7 +506,7 @@ pub fn importer(conn: &mut Connection, journal: &Journal, ecriture: Option<&ecri
         bilan.etats += tx
             .execute(
                 "UPDATE cartes SET etat_fsrs = ?2, echeance = ?3, introduite_le = coalesce(introduite_le, ?4), etat_maj = ?5
-                 WHERE id = ?1 AND etat_maj < ?5",
+                 WHERE id = ?1 AND (etat_maj < ?5 OR etat_fsrs IS NULL)",
                 params![id, s.etat_fsrs, s.echeance, s.introduite_le.unwrap_or(s.maj), s.maj],
             )
             .map_err(e)?;
@@ -558,6 +581,9 @@ pub fn importer(conn: &mut Connection, journal: &Journal, ecriture: Option<&ecri
             bilan.notes_a_valider += 1;
         }
         conn.execute("INSERT INTO synchro_appliques(id, date) VALUES (?1, ?2)", params![id, ctx.maintenant]).map_err(e)?;
+    }
+    if journal.pc {
+        crate::synchro_pc::fusionner_fichiers(conn, journal, ecriture, &mut bilan)?;
     }
     Ok(bilan)
 }
@@ -634,6 +660,20 @@ pub struct Rapport {
     /// Dépôts de photos reçus du téléphone (traités ensuite par l'IA, en arrière-plan).
     #[serde(default)]
     pub depots: usize,
+    /// Venus d'un autre ordinateur.
+    #[serde(default)]
+    pub notes_recues: usize,
+    #[serde(default)]
+    pub notes_supprimees: usize,
+    #[serde(default)]
+    pub suppressions_refusees: usize,
+    #[serde(default)]
+    pub cartes: usize,
+    #[serde(default)]
+    pub evaluations: usize,
+    /// Les données de ce PC ont été envoyées aux autres ordinateurs.
+    #[serde(default)]
+    pub envoye_pc: bool,
     /// Le contenu du PC a été envoyé (il avait changé).
     pub envoye: bool,
     /// Taille du contenu compressé, en octets.
@@ -697,10 +737,21 @@ async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
         rapport.notes_ecrites += bilan.notes_ecrites;
         rapport.notes_a_valider += bilan.notes_a_valider;
         rapport.notes_en_attente += bilan.notes_en_attente;
-        // Des notes attendent l'autorisation d'écrire : le journal sera relu la prochaine fois.
-        if bilan.notes_en_attente == 0 {
+        rapport.notes_recues += bilan.notes_recues;
+        rapport.notes_supprimees += bilan.notes_supprimees;
+        rapport.suppressions_refusees += bilan.suppressions_refusees;
+        rapport.cartes += bilan.cartes;
+        rapport.evaluations += bilan.evaluations;
+        // Des notes attendent l'autorisation d'écrire : le journal sera relu la prochaine fois. Des notes reçues
+        // d'un autre PC aussi : leurs cartes n'existent ici qu'après l'indexation, les révisions de ces cartes
+        // seront reprises à la prochaine lecture.
+        if bilan.notes_en_attente == 0 && bilan.notes_recues == 0 {
             let _ = db::ecrire_meta(&etat.db.lock().unwrap(), &vu, &f.modified_time);
         }
+    }
+
+    if rapport.cartes > 0 {
+        etat.cartes_ia.reveiller();
     }
 
     // 1 bis. Photos de cours déposées par le téléphone : copiées ici, le traitement par l'IA vient ensuite.
@@ -729,6 +780,27 @@ async fn synchroniser_(etat: &crate::Etat) -> Result<Rapport, String> {
         etat.google.envoyer(FICHIER_CONTENU, existant.as_deref(), gz).await?;
         let _ = db::ecrire_meta(&etat.db.lock().unwrap(), "synchro_contenu", &signature);
         rapport.envoye = true;
+    }
+
+    // 3. Données de ce PC pour les autres ordinateurs (révisions, cartes de l'IA, évaluations, notes).
+    let octets = {
+        let reglages = etat.reglages.lock().unwrap().clone();
+        let conn = etat.db.lock().unwrap();
+        let journal = crate::synchro_pc::journal(&conn, reglages.vault().as_deref())?;
+        let json = serde_json::to_vec(&journal).map_err(|e| e.to_string())?;
+        let signature = empreinte(&json);
+        let nom = format!("{PREFIXE_JOURNAL}{moi}.json.gz");
+        let existant = fichiers.iter().find(|f| f.name == nom).map(|f| f.id.clone());
+        if existant.is_some() && db::lire_meta(&conn, "synchro_journal_pc").as_deref() == Some(signature.as_str()) {
+            None
+        } else {
+            Some((nom, existant, compresser(&json), signature))
+        }
+    };
+    if let Some((nom, existant, gz, signature)) = octets {
+        etat.google.envoyer(&nom, existant.as_deref(), gz).await?;
+        let _ = db::ecrire_meta(&etat.db.lock().unwrap(), "synchro_journal_pc", &signature);
+        rapport.envoye_pc = true;
     }
     Ok(rapport)
 }

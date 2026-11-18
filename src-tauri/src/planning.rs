@@ -60,16 +60,17 @@ pub fn enregistrer(conn: &Connection, e: &Evaluation, maintenant: i64) -> Result
     let chapitres = serde_json::to_string(&e.chapitres).map_err(|x| x.to_string())?;
     if e.id == 0 {
         conn.execute(
-            "INSERT INTO evaluations(jour, matiere, titre, genre, chapitres, creee_le) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![e.jour, e.matiere, e.titre.trim(), e.genre, chapitres, maintenant],
+            "INSERT INTO evaluations(jour, matiere, titre, genre, chapitres, creee_le, uid, maj)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?6)",
+            params![e.jour, e.matiere, e.titre.trim(), e.genre, chapitres, maintenant, nouvel_uid(maintenant)],
         )
         .map_err(|x| x.to_string())?;
         Ok(conn.last_insert_rowid())
     } else {
         let n = conn
             .execute(
-                "UPDATE evaluations SET jour = ?2, matiere = ?3, titre = ?4, genre = ?5, chapitres = ?6 WHERE id = ?1",
-                params![e.id, e.jour, e.matiere, e.titre.trim(), e.genre, chapitres],
+                "UPDATE evaluations SET jour = ?2, matiere = ?3, titre = ?4, genre = ?5, chapitres = ?6, maj = ?7 WHERE id = ?1",
+                params![e.id, e.jour, e.matiere, e.titre.trim(), e.genre, chapitres, maintenant],
             )
             .map_err(|x| x.to_string())?;
         if n == 0 {
@@ -96,7 +97,21 @@ pub fn lister(conn: &Connection, depuis: &str) -> rusqlite::Result<Vec<Evaluatio
     lignes.collect()
 }
 
+/// Identifiant d'une évaluation, le même sur tous les ordinateurs synchronisés.
+fn nouvel_uid(maintenant: i64) -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_i64(maintenant);
+    format!("ev-{maintenant}-{:08x}", h.finish() as u32)
+}
+
+/// Supprime une évaluation. La suppression est retenue pour que les autres ordinateurs l'appliquent aussi.
 pub fn supprimer(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+    let maintenant = crate::maintenant_ms();
+    conn.execute(
+        "INSERT OR REPLACE INTO evaluations_supprimees(uid, date) SELECT uid, ?2 FROM evaluations WHERE id = ?1 AND uid IS NOT NULL",
+        params![id, maintenant],
+    )?;
     Ok(conn.execute("DELETE FROM evaluations WHERE id = ?1", [id])? > 0)
 }
 

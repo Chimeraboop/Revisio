@@ -15,11 +15,20 @@ function pluriel(n: number, mot: string) {
 export function resumeRapport(r: RapportSynchro): string {
   if (r.erreur) return r.erreur;
   const parties: string[] = [];
-  if (r.revisions) parties.push(`${pluriel(r.revisions, "révision")} reçue${r.revisions > 1 ? "s" : ""} du téléphone`);
+  if (r.revisions) parties.push(`${pluriel(r.revisions, "révision")} reçue${r.revisions > 1 ? "s" : ""}`);
+  if (r.notesRecues) parties.push(`${pluriel(r.notesRecues, "note")} reçue${r.notesRecues > 1 ? "s" : ""} d'un autre ordinateur`);
+  if (r.notesSupprimees) parties.push(`${pluriel(r.notesSupprimees, "note")} supprimée${r.notesSupprimees > 1 ? "s" : ""} comme sur l'autre ordinateur (corbeille)`);
+  if (r.suppressionsRefusees)
+    parties.push(
+      `${pluriel(r.suppressionsRefusees, "note")} supprimée${r.suppressionsRefusees > 1 ? "s" : ""} sur l'autre ordinateur gardée${r.suppressionsRefusees > 1 ? "s" : ""} ici par prudence (trop d'un coup) : supprime-les toi-même si c'est voulu`,
+    );
+  if (r.cartes) parties.push(`${pluriel(r.cartes, "carte")} de l'IA reçue${r.cartes > 1 ? "s" : ""}`);
+  if (r.evaluations) parties.push(`${pluriel(r.evaluations, "évaluation")} mise${r.evaluations > 1 ? "s" : ""} à jour`);
   if (r.notesEcrites) parties.push(`${pluriel(r.notesEcrites, "note")} modifiée${r.notesEcrites > 1 ? "s" : ""}`);
   if (r.notesAValider) parties.push(`${pluriel(r.notesAValider, "modification")} à valider (Photos de cours)`);
   if (r.notesEnAttente) parties.push(`${pluriel(r.notesEnAttente, "note")} en attente : autorise l'écriture dans le vault`);
-  if (r.envoye) parties.push(`notes et cartes envoyées (${Math.max(1, Math.round(r.taille / 1024))} Ko)`);
+  if (r.envoye) parties.push(`notes et cartes envoyées au téléphone (${Math.max(1, Math.round(r.taille / 1024))} Ko)`);
+  if (r.envoyePc && !r.envoye) parties.push("données envoyées à tes autres ordinateurs");
   return parties.length ? parties.join(", ") + "." : "Tout était déjà à jour.";
 }
 
@@ -67,7 +76,7 @@ export default function ReglagesSynchroVue() {
   return (
     <section className="carte bloc">
       <h2 className="titre-bloc">
-        <Smartphone size={18} className="icone" aria-hidden /> Révisio sur ton téléphone
+        <Smartphone size={18} className="icone" aria-hidden /> Révisio sur ton téléphone et tes autres ordinateurs
       </h2>
       <p className="texte-doux petit">
         Révise et lis tes notes sur ton téléphone, même sans Internet. Tes cartes, ta progression et tes notes passent par
@@ -109,6 +118,19 @@ export default function ReglagesSynchroVue() {
             <li>Ajoute-la à l'écran d'accueil (iPhone : bouton Partager, puis « Sur l'écran d'accueil »).</li>
             <li>Ouvre Révisio depuis l'écran d'accueil et connecte le même compte Google.</li>
           </ol>
+          <h3 className="sous-titre-bloc">Sur un autre ordinateur</h3>
+          <ol className="petit">
+            <li>Installe Révisio (Windows ou Mac) et crée un nouveau dossier de notes vide.</li>
+            <li>Dans Réglages, connecte le même compte Google : tes notes, cartes, révisions et évaluations arrivent.</li>
+            <li>
+              Ensuite, chaque ordinateur garde l'autre à jour. Une note modifiée des deux côtés t'est proposée (Photos de
+              cours, propositions) ; une note supprimée sur l'un va dans la corbeille de l'autre.
+            </li>
+          </ol>
+          <p className="texte-doux petit">
+            Ne passent pas d'un ordinateur à l'autre : images, dessins Excalidraw, modèles, conversations avec l'IA, cartes
+            mentales, podcasts et vidéos.
+          </p>
         </>
       ) : (
         <div className="rangee bloc-haut">

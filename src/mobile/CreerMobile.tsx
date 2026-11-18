@@ -148,7 +148,7 @@ export function DepotPhotos({ onRetour }: { onRetour: () => void }) {
           <h3 className="titre-bloc">Mes envois</h3>
           <ul className="depots-mobile">
             {depots.map((d) => {
-              const etat = etatDuDepot(pc.find((p) => p.id === d.id));
+              const etat = etatDuDepot(pc.find((p) => p.id === d.id) ?? d.pc);
               return (
                 <li key={d.id} className={etat.probleme ? "probleme" : ""}>
                   <strong>

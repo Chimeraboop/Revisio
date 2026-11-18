@@ -396,6 +396,24 @@ const MIGRATIONS: &[&str] = &[
         date INTEGER NOT NULL
     );
     "#,
+    // 17 — synchronisation entre ordinateurs : évaluations identifiées partout (et suppressions retenues),
+    // dernière version commune de chaque note avec chacun des autres PC (fusion à trois versions).
+    r#"
+    ALTER TABLE evaluations ADD COLUMN uid TEXT;
+    ALTER TABLE evaluations ADD COLUMN maj INTEGER NOT NULL DEFAULT 0;
+    UPDATE evaluations SET uid = 'ev-' || id || '-' || creee_le, maj = creee_le;
+    CREATE UNIQUE INDEX evaluations_uid ON evaluations(uid);
+    CREATE TABLE evaluations_supprimees (
+        uid  TEXT PRIMARY KEY,
+        date INTEGER NOT NULL
+    );
+    CREATE TABLE synchro_notes_base (
+        appareil  TEXT NOT NULL,
+        chemin    TEXT NOT NULL,
+        empreinte TEXT NOT NULL,
+        PRIMARY KEY (appareil, chemin)
+    );
+    "#,
 ];
 
 pub fn lire_meta(conn: &Connection, cle: &str) -> Option<String> {

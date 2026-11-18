@@ -27,6 +27,7 @@ pub mod search;
 pub mod secret;
 pub mod settings;
 pub mod synchro;
+pub mod synchro_pc;
 pub mod sources_web;
 pub mod taches;
 pub mod vault;
