@@ -3,7 +3,8 @@
 //!
 //! Garde-fous :
 //! - uniquement des notes `.md`, jamais dans un dossier caché (`.obsidian`, `.git`…) ni dans
-//!   `_Templates`, jamais un dessin `.excalidraw.md`, jamais en dehors du vault ;
+//!   `_Templates`, jamais un dessin `.excalidraw.md` (seule exception : la copie EXACTE d'un dessin venue
+//!   d'un autre ordinateur par la synchronisation, `creer_copie` / `modifier_copie`), jamais en dehors du vault ;
 //! - une création ne remplace jamais un fichier existant ;
 //! - une modification vérifie que la note n'a pas changé depuis qu'on l'a lue ;
 //! - chaque écriture est notée dans `historique_vault` avec le contenu d'avant : elle peut
@@ -79,6 +80,17 @@ pub fn chemin_ecrivable(racine: &Path, relatif: &str) -> Result<PathBuf, String>
     Ok(complet)
 }
 
+/// Chemin d'un fichier `.md` recopié tel quel depuis un autre ordinateur (synchronisation) : comme
+/// `chemin_ecrivable`, mais les dessins Excalidraw sont acceptés. Le contenu n'est jamais rédigé ni retouché
+/// par Révisio : c'est à l'octet près celui de l'autre PC.
+pub fn chemin_synchronisable(racine: &Path, relatif: &str) -> Result<PathBuf, String> {
+    let complet = chemin_sur(racine, relatif)?;
+    if !relatif.to_lowercase().ends_with(".md") {
+        return Err(format!("Écriture refusée (seules les notes .md sont synchronisées) : {relatif}"));
+    }
+    Ok(complet)
+}
+
 /// Chemin absolu d'une image jointe (création seulement).
 pub fn piece_jointe_ecrivable(racine: &Path, relatif: &str) -> Result<PathBuf, String> {
     let complet = chemin_sur(racine, relatif)?;
@@ -121,6 +133,12 @@ pub struct Contexte<'a> {
 /// Crée une nouvelle note (et les dossiers manquants). Ne remplace jamais un fichier existant.
 pub fn creer(conn: &Connection, ctx: &Contexte, relatif: &str, contenu: &str) -> Result<i64, String> {
     let complet = chemin_ecrivable(ctx.racine, relatif)?;
+    creer_fichier(conn, ctx, relatif, &complet, contenu.as_bytes())
+}
+
+/// Crée la copie exacte d'une note ou d'un dessin venus d'un autre ordinateur (synchronisation).
+pub fn creer_copie(conn: &Connection, ctx: &Contexte, relatif: &str, contenu: &str) -> Result<i64, String> {
+    let complet = chemin_synchronisable(ctx.racine, relatif)?;
     creer_fichier(conn, ctx, relatif, &complet, contenu.as_bytes())
 }
 
@@ -323,10 +341,33 @@ pub fn modifier(
     nouveau: &str,
     encore_pareille: &dyn Fn(&[u8]) -> bool,
 ) -> Result<i64, String> {
+    let complet = chemin_ecrivable(ctx.racine, relatif)?;
+    remplacer(conn, ctx, relatif, &complet, nouveau, encore_pareille)
+}
+
+/// Remplace une note ou un dessin par la copie exacte venue d'un autre ordinateur (synchronisation).
+pub fn modifier_copie(
+    conn: &Connection,
+    ctx: &Contexte,
+    relatif: &str,
+    nouveau: &str,
+    encore_pareille: &dyn Fn(&[u8]) -> bool,
+) -> Result<i64, String> {
+    let complet = chemin_synchronisable(ctx.racine, relatif)?;
+    remplacer(conn, ctx, relatif, &complet, nouveau, encore_pareille)
+}
+
+fn remplacer(
+    conn: &Connection,
+    ctx: &Contexte,
+    relatif: &str,
+    complet: &Path,
+    nouveau: &str,
+    encore_pareille: &dyn Fn(&[u8]) -> bool,
+) -> Result<i64, String> {
     if !ctx.autorisee {
         return Err(DESACTIVEE.into());
     }
-    let complet = chemin_ecrivable(ctx.racine, relatif)?;
     if !complet.is_file() {
         return Err(format!("Note introuvable : {relatif}"));
     }
@@ -345,7 +386,7 @@ pub fn modifier(
     )
     .map_err(|e| e.to_string())?;
     let id = conn.last_insert_rowid();
-    if let Err(e) = std::fs::write(&complet, nouveau.as_bytes()) {
+    if let Err(e) = std::fs::write(complet, nouveau.as_bytes()) {
         conn.execute("DELETE FROM historique_vault WHERE id = ?1", [id]).ok();
         return Err(format!("Écriture de {relatif} : {e}"));
     }

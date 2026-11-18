@@ -128,8 +128,8 @@ export default function ReglagesSynchroVue() {
             </li>
           </ol>
           <p className="texte-doux petit">
-            Ne passent pas d'un ordinateur à l'autre : images, dessins Excalidraw, modèles, conversations avec l'IA, cartes
-            mentales, podcasts et vidéos.
+            Ne passent pas d'un ordinateur à l'autre : images, modèles, conversations avec l'IA, cartes mentales, podcasts
+            et vidéos.
           </p>
         </>
       ) : (

@@ -6,6 +6,9 @@
 //! du téléphone (union par identifiant, le plus récent gagne). Comme en Python avec des `set` : refaire la
 //! fusion une deuxième fois ne change rien.
 //!
+//! Les dessins Excalidraw (`.excalidraw.md`) voyagent aussi, copiés à l'octet près (`ecriture::creer_copie`) :
+//! Révisio ne les rédige ni ne les retouche jamais.
+//!
 //! Les notes sont fusionnées « à trois versions » : pour chaque autre PC et chaque note, on retient la
 //! dernière version que les deux avaient en commun (la base). Si seul l'autre PC a changé la note, on prend sa
 //! version ; si seul ce PC l'a changée, on ne fait rien (l'autre prendra la nôtre) ; si les deux l'ont changée,
@@ -168,15 +171,15 @@ pub fn journal(conn: &Connection, racine: Option<&Path>) -> Result<Journal, Stri
     let mut fichiers_complets = false;
     if let Some(racine) = racine.filter(|r| r.is_dir()) {
         let chemins: Vec<String> = conn
-            .prepare("SELECT chemin FROM notes WHERE genre != 'schema' ORDER BY chemin")
+            .prepare("SELECT chemin FROM notes ORDER BY chemin")
             .map_err(e)?
             .query_map([], |r| r.get(0))
             .map_err(e)?
             .collect::<rusqlite::Result<_>>()
             .map_err(e)?;
         for chemin in chemins {
-            // Seules les notes que Révisio a le droit d'écrire voyagent (pas les modèles, ni les dessins).
-            if ecriture::chemin_ecrivable(racine, &chemin).is_err() {
+            // Notes et dessins Excalidraw (copiés tels quels) ; pas les modèles ni les dossiers réservés.
+            if ecriture::chemin_synchronisable(racine, &chemin).is_err() {
                 continue;
             }
             match vault::lire_octets(racine, &chemin) {
@@ -363,7 +366,7 @@ pub fn fusionner_fichiers(conn: &Connection, journal: &Journal, ecriture: Option
                 if b.as_deref() == Some(f.empreinte.as_str()) {
                     continue;
                 }
-                match ecriture::creer(conn, &ctx, &f.chemin, contenu) {
+                match ecriture::creer_copie(conn, &ctx, &f.chemin, contenu) {
                     Ok(_) => {
                         bilan.notes_recues += 1;
                         poser_base(conn, app, &f.chemin, &f.empreinte).map_err(e)?;
@@ -376,7 +379,7 @@ pub fn fusionner_fichiers(conn: &Connection, journal: &Journal, ecriture: Option
                 let accueil_neuve = b.is_none() && octets == settings::NOTE_ACCUEIL.as_bytes();
                 if b.as_deref() == Some(le.as_str()) || accueil_neuve {
                     // Seul l'autre PC l'a changée.
-                    if ecriture::modifier(conn, &ctx, &f.chemin, contenu, &|o| empreinte(o) == le).is_ok() {
+                    if ecriture::modifier_copie(conn, &ctx, &f.chemin, contenu, &|o| empreinte(o) == le).is_ok() {
                         bilan.notes_recues += 1;
                         poser_base(conn, app, &f.chemin, &f.empreinte).map_err(e)?;
                     }
@@ -534,14 +537,24 @@ mod tests {
         let c = ctx(&racine);
 
         // 1re fois : tout est nouveau ici.
-        let j = journal_pc(vec![fichier("SVT/A.md", "A1"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C1")]);
+        let j = journal_pc(vec![
+            fichier("SVT/A.md", "A1"),
+            fichier("SVT/B.md", "B1"),
+            fichier("SVT/C.md", "C1"),
+            fichier("SVT/Cellule (schéma).excalidraw.md", "dessin"),
+            fichier("_Templates/Modèle.md", "non"),
+        ]);
         let b = importer(&mut conn, &j, Some(&c)).unwrap();
-        assert_eq!(b.notes_recues, 3);
+        assert_eq!((b.notes_recues, b.ignorees), (4, 1));
+        assert_eq!(std::fs::read_to_string(racine.join("SVT/Cellule (schéma).excalidraw.md")).unwrap(), "dessin");
+        assert!(!racine.join("_Templates").exists());
+        // L'éditeur et l'IA n'ont toujours pas le droit de toucher un dessin.
+        assert!(ecriture::modifier(&conn, &c, "SVT/Cellule (schéma).excalidraw.md", "x", &|_| true).is_err());
         assert_eq!(std::fs::read_to_string(racine.join("SVT/A.md")).unwrap(), "A1");
 
         // Ici on modifie B ; là-bas on modifie A, et B et C restent pareilles.
         std::fs::write(racine.join("SVT/B.md"), "B2-ici").unwrap();
-        let j = journal_pc(vec![fichier("SVT/A.md", "A2"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C1")]);
+        let j = journal_pc(vec![fichier("SVT/A.md", "A2"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C1"), fichier("SVT/Cellule (schéma).excalidraw.md", "dessin")]);
         let b = importer(&mut conn, &j, Some(&c)).unwrap();
         assert_eq!((b.notes_recues, b.notes_a_valider), (1, 0));
         assert_eq!(std::fs::read_to_string(racine.join("SVT/A.md")).unwrap(), "A2");
@@ -549,13 +562,13 @@ mod tests {
 
         // Les deux changent C : proposée, rien d'écrasé ; une seule proposition même si le journal est relu.
         std::fs::write(racine.join("SVT/C.md"), "C2-ici").unwrap();
-        let j = journal_pc(vec![fichier("SVT/A.md", "A2"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C2-la")]);
+        let j = journal_pc(vec![fichier("SVT/A.md", "A2"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C2-la"), fichier("SVT/Cellule (schéma).excalidraw.md", "dessin")]);
         assert_eq!(importer(&mut conn, &j, Some(&c)).unwrap().notes_a_valider, 1);
         assert_eq!(importer(&mut conn, &j, Some(&c)).unwrap().notes_a_valider, 0);
         assert_eq!(std::fs::read_to_string(racine.join("SVT/C.md")).unwrap(), "C2-ici");
 
         // A supprimée là-bas (inchangée ici) : à la corbeille. B (modifiée ici) gardée.
-        let j = journal_pc(vec![fichier("SVT/C.md", "C2-la")]);
+        let j = journal_pc(vec![fichier("SVT/C.md", "C2-la"), fichier("SVT/Cellule (schéma).excalidraw.md", "dessin")]);
         let b = importer(&mut conn, &j, Some(&c)).unwrap();
         assert_eq!(b.notes_supprimees, 1);
         assert!(!racine.join("SVT/A.md").exists());
