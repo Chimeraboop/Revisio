@@ -385,6 +385,9 @@ pub fn fusionner_fichiers(conn: &Connection, journal: &Journal, ecriture: Option
                     }
                 } else if b.as_deref() == Some(f.empreinte.as_str()) {
                     // Seul ce PC l'a changée : l'autre prendra notre version.
+                } else if f.chemin.to_lowercase().ends_with(".excalidraw.md") {
+                    // Dessin changé des deux côtés : une proposition ne pourrait pas être acceptée (Révisio n'écrit un
+                    // dessin que par copie exacte) ; la version de ce PC est gardée.
                 } else {
                     // Changée des deux côtés (ou deux notes différentes du même nom) : l'élève choisit.
                     let deja: bool = conn
@@ -402,7 +405,7 @@ pub fn fusionner_fichiers(conn: &Connection, journal: &Journal, ecriture: Option
                             params![
                                 ctx.maintenant,
                                 f.chemin,
-                                String::from_utf8_lossy(&octets),
+                                octets,
                                 contenu,
                                 format!("Modifiée aussi sur {} : choisis la version à garder.", journal.nom)
                             ],
@@ -565,6 +568,9 @@ mod tests {
         let j = journal_pc(vec![fichier("SVT/A.md", "A2"), fichier("SVT/B.md", "B1"), fichier("SVT/C.md", "C2-la"), fichier("SVT/Cellule (schéma).excalidraw.md", "dessin")]);
         assert_eq!(importer(&mut conn, &j, Some(&c)).unwrap().notes_a_valider, 1);
         assert_eq!(importer(&mut conn, &j, Some(&c)).unwrap().notes_a_valider, 0);
+        // La proposition se relit (écran Photos de cours) : contenu d'origine rangé en octets.
+        let props = crate::photos::propositions(&conn).unwrap();
+        assert_eq!((props.len(), props[0].avant.as_str(), props[0].apres.as_str()), (1, "C2-ici", "C2-la"));
         assert_eq!(std::fs::read_to_string(racine.join("SVT/C.md")).unwrap(), "C2-ici");
 
         // A supprimée là-bas (inchangée ici) : à la corbeille. B (modifiée ici) gardée.

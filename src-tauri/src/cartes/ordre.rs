@@ -51,8 +51,10 @@ fn nettoyer_intro(intro: &str) -> String {
     sans_entete.replace("**", "").trim().trim_end_matches(':').trim().to_string()
 }
 
+/// Les fiches de synthèse servent à relire : leurs cartes feraient doublon avec celles des notes du chapitre
+/// (choix de l'élève, 19/11/2026).
 pub fn est_source(note: &NoteSource) -> bool {
-    !matches!(note.genre.as_str(), "vocabulaire" | "schema" | "accueil" | "revision")
+    !matches!(note.genre.as_str(), "vocabulaire" | "schema" | "accueil" | "revision" | "fiche_synthese")
 }
 
 pub fn cartes(note: &NoteSource, sections: &[SectionSource]) -> Vec<CarteGeneree> {

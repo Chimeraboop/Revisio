@@ -19,8 +19,9 @@ use crate::ia::gemini::{ErreurIa, Partie, Requete};
 use crate::ia::questions::{self, LotQuestions};
 use crate::{ia, maintenant_ms, Etat};
 
-/// Genres de notes qui reçoivent des cartes (le vocabulaire a les siennes, sans IA).
-pub const GENRES_DE_COURS: [&str; 5] = ["cours", "fiche_synthese", "methodologie", "reference", "etude_lineaire"];
+/// Genres de notes qui reçoivent des cartes (le vocabulaire a les siennes, sans IA ; les fiches de synthèse
+/// n'en ont pas : elles résument les notes du chapitre, qui ont déjà les leurs).
+pub const GENRES_DE_COURS: [&str; 4] = ["cours", "methodologie", "reference", "etude_lineaire"];
 /// Extraits envoyés en un appel : assez petit pour que l'IA couvre tout le texte.
 const CARACTERES_PAR_LOT: usize = 4_500;
 /// Une carte pour environ 250 caractères de cours (350 laissait de côté la moitié des notions, essai du 01/11).

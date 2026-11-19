@@ -285,6 +285,8 @@ note SANS frontmatter (Révisio l'ajoute).\n\
 > [!quote]+ Citation, > [!success]+ Application, > [!warning]+ Points de vigilance), tableaux, listes numérotées \
 pour des étapes. Formules en LaTeX entre $…$. Mots-clés importants en **gras**. Vocabulaire : une liste \
 « * mot = traduction » par partie.\n\
+- Ne rédige PAS de fiche de synthèse et ne modifie pas celle du chapitre : Révisio la complète lui-même ensuite \
+avec tes nouvelles notes.\n\
 - Termine chaque note par un callout > [!tip]+ Notes liées contenant des [[liens]] vers les notes voisines ou vers \
 les autres notes que tu crées (titres exacts).\n\
 - modifications : pour une notion déjà traitée dans une note existante, seulement si les photos apportent une \
@@ -367,6 +369,9 @@ pub fn valider_redaction(r: &Redaction, existantes: &[(String, String)]) -> Resu
     let mut noms = HashSet::new();
     for n in &r.notes {
         let nom = nom_de_fichier(&n.titre).to_lowercase();
+        if est_fiche(&nom) {
+            return Err(format!("« {} » : la fiche de synthèse est rédigée à part, pas avec les notes", n.titre));
+        }
         if nom.is_empty() || !noms.insert(nom) {
             return Err(format!("titre vide ou en double : « {} »", n.titre));
         }
@@ -489,9 +494,172 @@ pub fn note_complete(note: &NoteRedigee, cree_le: &str) -> String {
     texte
 }
 
+// ---------- 3. Fiche de synthèse du chapitre ----------
+//
+// Chaque chapitre a une note qui regroupe tout ce qui est dit dans ses notes (demandé le 2026-11-19). Quand des
+// notes y sont ajoutées par l'IA, la fiche est créée si elle manque, sinon complétée et PROPOSÉE à l'élève.
+
+/// Le fichier est une fiche de synthèse (« Fiche de synthèse - … »).
+pub fn est_fiche(chemin: &str) -> bool {
+    let nom = chemin.rsplit('/').next().unwrap_or(chemin).to_lowercase();
+    nom.starts_with("fiche de synthèse") || nom.starts_with("fiche de synthese")
+}
+
+/// Titre (= nom de fichier) d'une nouvelle fiche pour ce chapitre.
+pub fn titre_fiche(chapitre: &str) -> String {
+    nom_de_fichier(&format!("Fiche de synthèse - {chapitre}"))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FicheRedigee {
+    pub contenu: String,
+    #[serde(default)]
+    pub raison: String,
+}
+
+/// Ce que l'IA reçoit pour écrire ou compléter la fiche.
+pub struct ContexteFiche {
+    pub matiere: String,
+    pub chapitre: String,
+    /// (nom, contenu) des notes du chapitre, hors fiche et dessins.
+    pub notes: Vec<(String, String)>,
+    /// Noms des notes qui viennent d'être ajoutées.
+    pub nouvelles: Vec<String>,
+    /// Fiche actuelle, frontmatter compris ; absente s'il faut la créer.
+    pub fiche: Option<String>,
+    /// Une autre fiche de synthèse du vault, pour le style (création seulement).
+    pub exemple: Option<String>,
+}
+
+/// Au-delà, on n'exige plus que la fiche cite chaque note (seulement les nouvelles).
+const NOTES_TOUTES_CITEES: usize = 25;
+
+pub fn consigne_fiche(c: &ContexteFiche) -> String {
+    let mut texte = format!("Matière : {}. Chapitre : {}.\n\n", c.matiere, c.chapitre);
+    match &c.fiche {
+        None => texte.push_str(&format!(
+            "Rédige la FICHE DE SYNTHÈSE de ce chapitre : une note qui regroupe tout ce qui est dit dans ses notes, \
+pour relire le cours d'un coup. Règles :\n\
+- Commence par une ligne en italique « *Repère cours : …* » (chapitre et plan du professeur s'il apparaît dans les \
+repères des notes), puis le titre « # Fiche de synthèse — {} ».\n\
+- Une section ## (ou ###) par note, dans l'ordre logique du cours (plan du professeur s'il est connu). Le titre de la \
+section contient un lien [[nom exact de la note]] ; dessous, un résumé fidèle en 2 à 5 phrases ou une courte liste : \
+définitions, propriétés, formules (LaTeX entre $…$), dates et exemples clés, mots-clés en **gras**. Chaque note \
+fournie doit être citée par un lien.\n\
+- Rien qui ne soit dans les notes : aucune connaissance ajoutée. Pas de questions, pas de callout « Notes liées ».\n\
+- contenu : le corps SANS frontmatter (Révisio l'ajoute). raison : chaîne vide.",
+            c.chapitre
+        )),
+        Some(_) => texte.push_str(&format!(
+            "Ces notes du chapitre ne sont pas encore dans sa fiche de synthèse : {}. COMPLÈTE la fiche (ci-dessous) :\n\
+- Ajoute pour chacune de ces notes une section au même style que les autres, à sa place dans le plan du cours, avec \
+un lien [[nom exact de la note]] et un résumé fidèle (définitions, propriétés, formules, dates, mots-clés en **gras**).\n\
+- Ne supprime ni ne reformule RIEN de l'existant : uniquement des ajouts. Rien qui ne soit dans les notes.\n\
+- contenu : la fiche COMPLÈTE (frontmatter compris). raison : en une phrase, ce que tu ajoutes.",
+            c.nouvelles.iter().map(|n| format!("[[{n}]]")).collect::<Vec<_>>().join(", ")
+        )),
+    }
+    if let Some(fiche) = &c.fiche {
+        texte.push_str(&format!("\n\nFiche de synthèse actuelle :\n<<<\n{fiche}\n>>>"));
+    } else if let Some(exemple) = &c.exemple {
+        texte.push_str(&format!("\n\nFiche de synthèse d'un autre chapitre (imite son style, pas son contenu) :\n<<<\n{exemple}\n>>>"));
+    }
+    for (nom, contenu) in &c.notes {
+        let nouvelle = if c.nouvelles.contains(nom) { " (NOUVELLE)" } else { "" };
+        texte.push_str(&format!("\n\nNote « {nom} »{nouvelle} :\n<<<\n{contenu}\n>>>"));
+    }
+    texte
+}
+
+pub fn schema_fiche() -> Value {
+    json!({
+        "type": "object",
+        "properties": { "contenu": {"type": "string"}, "raison": {"type": "string"} },
+        "required": ["contenu", "raison"]
+    })
+}
+
+/// Le texte contient-il un lien vers cette note ?
+fn cite(texte: &str, nom: &str) -> bool {
+    ["]]", "|", "#"].iter().any(|fin| texte.contains(&format!("[[{nom}{fin}")))
+}
+
+/// Notes à ajouter à une fiche existante : les nouvelles, plus celles du chapitre qu'elle ne cite pas encore
+/// (ajoutées à la main ou avant que Révisio tienne les fiches à jour), 10 au plus.
+pub fn notes_a_ajouter(fiche: &str, chapitre: &[String], nouvelles: &[String]) -> Vec<String> {
+    let mut a_ajouter: Vec<String> = nouvelles.to_vec();
+    for nom in chapitre {
+        if a_ajouter.len() >= 10 {
+            break;
+        }
+        if !a_ajouter.contains(nom) && !cite(fiche, nom) {
+            a_ajouter.push(nom.clone());
+        }
+    }
+    a_ajouter
+}
+
+pub fn valider_fiche(f: &FicheRedigee, c: &ContexteFiche) -> Result<(), String> {
+    let contenu = retablir_sauts_de_ligne(&f.contenu);
+    if contenu.trim().chars().count() < 200 {
+        return Err("fiche trop courte".into());
+    }
+    let a_citer: Vec<&String> = if c.fiche.is_none() && c.notes.len() <= NOTES_TOUTES_CITEES {
+        c.notes.iter().map(|(n, _)| n).collect()
+    } else {
+        c.nouvelles.iter().collect()
+    };
+    let oubliees: Vec<&str> = a_citer.iter().filter(|n| !cite(&contenu, n)).map(|n| n.as_str()).collect();
+    if !oubliees.is_empty() {
+        return Err(format!("la fiche ne cite pas ces notes par un lien [[…]] : {}", oubliees.join(", ")));
+    }
+    if let Some(avant) = &c.fiche {
+        if !conserve_le_contenu(avant, &contenu) {
+            return Err("la fiche complétée supprime ou reformule du contenu existant".into());
+        }
+    }
+    Ok(())
+}
+
+/// Nouvelle fiche : frontmatter de Révisio (comme les fiches de l'élève) puis le corps rédigé.
+pub fn fiche_complete(contenu: &str, cree_le: &str) -> String {
+    let mut corps = reparer_encadres(retablir_sauts_de_ligne(contenu.trim()).trim());
+    if corps.starts_with("---") {
+        if let Some(fin) = corps[3..].find("\n---") {
+            corps = corps[3 + fin + 4..].trim_start().to_string();
+        }
+    }
+    format!("---\ntags: [synthese]\ncreated: {cree_le}\n---\n\n{corps}\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fiche_de_synthese() {
+        assert!(est_fiche("Spé SVT/Ch 3/Fiche de synthèse - Chapitre 3 La méiose.md"));
+        assert!(!est_fiche("Spé SVT/Ch 3/La méiose.md"));
+        assert_eq!(titre_fiche("Chapitre 2 : Lumière"), "Fiche de synthèse - Chapitre 2 Lumière");
+        let notes = vec![("A".to_string(), "texte A".to_string()), ("B".to_string(), "texte B".to_string())];
+        let mut c = ContexteFiche { matiere: "SVT".into(), chapitre: "Ch".into(), notes, nouvelles: vec!["B".into()], fiche: None, exemple: None };
+        let longue = |liens: &str| FicheRedigee { contenu: format!("# Fiche\n{liens}\n{}", "Résumé fidèle. ".repeat(20)), raison: String::new() };
+        // Création : toutes les notes doivent être citées.
+        assert!(valider_fiche(&longue("## [[A]]\n## [[B|la note B]]"), &c).is_ok());
+        assert!(valider_fiche(&longue("## [[B]]"), &c).unwrap_err().contains("A"));
+        assert!(consigne_fiche(&c).contains("Rédige la FICHE DE SYNTHÈSE"));
+        // Mise à jour : l'existant est gardé, la nouvelle note est citée.
+        let avant = format!("---\ntags: [synthese]\n---\n# Fiche\n## [[A]]\n{}", "Résumé fidèle. ".repeat(20));
+        c.fiche = Some(avant.clone());
+        assert!(consigne_fiche(&c).contains("COMPLÈTE"));
+        let ok = FicheRedigee { contenu: format!("{avant}\n## [[B]]\nRésumé de B."), raison: "ajout de B".into() };
+        assert!(valider_fiche(&ok, &c).is_ok());
+        let reformulee = FicheRedigee { contenu: format!("# Autre\n## [[A]]\n## [[B]]\n{}", "Autre texte. ".repeat(30)), raison: String::new() };
+        assert!(valider_fiche(&reformulee, &c).unwrap_err().contains("reformule"));
+        let chapitre = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        assert_eq!(notes_a_ajouter("## [[A]] ## [[C|c]]", &chapitre, &["D".to_string()]), vec!["D", "B"]);
+        assert!(fiche_complete("---\nx: 1\n---\n# Fiche", "2026-11-19T12:00").starts_with("---\ntags: [synthese]\ncreated: 2026-11-19T12:00\n---\n\n# Fiche"));
+    }
 
     fn arbre_exemple() -> BTreeMap<String, Vec<String>> {
         let mut a = BTreeMap::new();

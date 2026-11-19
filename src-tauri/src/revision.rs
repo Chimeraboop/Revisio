@@ -887,17 +887,17 @@ mod tests {
         let conn = base();
         let langues = FiltreSeance { groupe: Some(Groupe::Langues), ..filtre() };
         let autres = FiltreSeance { groupe: Some(Groupe::Autres), ..filtre() };
-        let quotas = Quotas { langues: 2, autres: 3 };
+        let quotas = Quotas { langues: 2, autres: 1 };
         let l = preparer_seance(&conn, &langues, 2_000, quotas).unwrap().nouvelles;
         let a = preparer_seance(&conn, &autres, 2_000, quotas).unwrap().nouvelles;
         assert_eq!(l.len(), 2);
         assert!(l.iter().all(|c| c.genre == "vocabulaire"));
-        assert_eq!(a.len(), 3);
+        assert_eq!(a.len(), 1);
         assert!(a.iter().all(|c| c.genre != "vocabulaire"));
         // Sans groupe : les deux quotas s'additionnent.
-        assert_eq!(preparer_seance(&conn, &filtre(), 2_000, quotas).unwrap().nouvelles.len(), 5);
+        assert_eq!(preparer_seance(&conn, &filtre(), 2_000, quotas).unwrap().nouvelles.len(), 3);
         let r = resume(&conn, 2_000, 1_000, quotas, &[], None).unwrap();
-        assert_eq!(r.groupes.iter().map(|g| g.nouvelles_restantes).collect::<Vec<_>>(), vec![2, 3]);
+        assert_eq!(r.groupes.iter().map(|g| g.nouvelles_restantes).collect::<Vec<_>>(), vec![2, 1]);
     }
 
     #[test]

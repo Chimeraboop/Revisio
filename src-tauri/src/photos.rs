@@ -126,6 +126,17 @@ fn changer_statut(conn: &Connection, id: i64, statut: &str, message: Option<&str
     );
 }
 
+/// Contenu d'origine d'une proposition : des octets (le fichier tel quel). La 0.18.0 en a parfois rangé en texte
+/// (synchronisation entre ordinateurs) : les deux sont acceptés.
+fn octets(r: &rusqlite::Row, i: usize) -> rusqlite::Result<Vec<u8>> {
+    use rusqlite::types::ValueRef;
+    match r.get_ref(i)? {
+        ValueRef::Blob(b) | ValueRef::Text(b) => Ok(b.to_vec()),
+        ValueRef::Null => Ok(Vec::new()),
+        _ => Err(rusqlite::Error::InvalidColumnType(i, "avant".into(), rusqlite::types::Type::Text)),
+    }
+}
+
 /// Propositions en attente, de la plus ancienne à la plus récente.
 pub fn propositions(conn: &Connection) -> rusqlite::Result<Vec<Proposition>> {
     let mut req = conn.prepare(
@@ -133,7 +144,7 @@ pub fn propositions(conn: &Connection) -> rusqlite::Result<Vec<Proposition>> {
          WHERE statut = 'attente' ORDER BY id",
     )?;
     let lignes = req.query_map([], |r| {
-        let avant: Vec<u8> = r.get(4)?;
+        let avant = octets(r, 4)?;
         let avant = String::from_utf8_lossy(&avant);
         Ok(Proposition {
             id: r.get(0)?,
@@ -158,7 +169,7 @@ pub fn accepter(etat: &Etat, id: i64) -> Result<String, String> {
         .query_row(
             "SELECT lot_id, chemin, avant, apres, raison FROM propositions_vault WHERE id = ?1 AND statut = 'attente'",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, octets(r, 2)?, r.get(3)?, r.get(4)?)),
         )
         .optional()
         .map_err(|e| e.to_string())?
@@ -272,48 +283,56 @@ importe-les en plusieurs fois."
     let (redaction, _): (Redaction, String) =
         demander(etat, &redacteur, &requete, |r| ia_photos::valider_redaction(r, &existantes)).await?;
 
-    // 3. Écriture des nouvelles notes, propositions pour les notes existantes.
+    // 3. Écriture des nouvelles notes, propositions pour les notes existantes (la fiche de synthèse vient après).
     let cree_le = chrono::Local::now().format("%Y-%m-%dT%H:%M").to_string();
-    let conn = etat.db.lock().unwrap();
-    let ctx = ecriture::Contexte {
-        racine: &racine,
-        autorisee: etat.reglages.lock().unwrap().ecriture_autorisee,
-        origine: "photos",
-        lot_id: Some(id),
-        raison: None,
-        maintenant: maintenant_ms(),
-        groupe: None,
-    };
-    let mut creees = 0;
-    let mut deja = Vec::new();
     let titres: Vec<&str> = redaction.notes.iter().map(|n| n.titre.as_str()).collect();
-    for note in &redaction.notes {
-        let chemin = format!("{dossier}/{}.md", ecriture::nom_de_fichier(&note.titre));
-        if racine.join(&chemin).exists() {
-            deja.push(note.titre.clone());
-            continue;
+    let (creees, proposees, deja, noms_crees) = {
+        let conn = etat.db.lock().unwrap();
+        let ctx = ecriture::Contexte {
+            racine: &racine,
+            autorisee: etat.reglages.lock().unwrap().ecriture_autorisee,
+            origine: "photos",
+            lot_id: Some(id),
+            raison: None,
+            maintenant: maintenant_ms(),
+            groupe: None,
+        };
+        let mut noms_crees = Vec::new();
+        let mut deja = Vec::new();
+        for note in &redaction.notes {
+            let nom = ecriture::nom_de_fichier(&note.titre);
+            let chemin = format!("{dossier}/{nom}.md");
+            if racine.join(&chemin).exists() {
+                deja.push(note.titre.clone());
+                continue;
+            }
+            let texte = ia_photos::corriger_liens(&ia_photos::note_complete(note, &cree_le), &titres);
+            ecriture::creer(&conn, &ctx, &chemin, &texte)?;
+            noms_crees.push(nom);
         }
-        let texte = ia_photos::corriger_liens(&ia_photos::note_complete(note, &cree_le), &titres);
-        ecriture::creer(&conn, &ctx, &chemin, &texte)?;
-        creees += 1;
-    }
-    let mut proposees = 0;
-    for m in &redaction.modifications {
-        let Ok(avant) = vault::lire_octets(&racine, &m.chemin) else { continue };
-        conn.execute(
-            "INSERT INTO propositions_vault(date, lot_id, chemin, avant, apres, raison) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                maintenant_ms(),
-                id,
-                m.chemin,
-                avant,
-                ia_photos::corriger_liens(&ia_photos::retablir_sauts_de_ligne(&m.contenu), &titres),
-                m.raison
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        proposees += 1;
-    }
+        let mut proposees = 0;
+        for m in &redaction.modifications {
+            // La fiche de synthèse est complétée à part (étape 4), à partir de toutes les notes du chapitre.
+            if ia_photos::est_fiche(&m.chemin) {
+                continue;
+            }
+            let Ok(avant) = vault::lire_octets(&racine, &m.chemin) else { continue };
+            conn.execute(
+                "INSERT INTO propositions_vault(date, lot_id, chemin, avant, apres, raison) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    maintenant_ms(),
+                    id,
+                    m.chemin,
+                    avant,
+                    ia_photos::corriger_liens(&ia_photos::retablir_sauts_de_ligne(&m.contenu), &titres),
+                    m.raison
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+            proposees += 1;
+        }
+        (noms_crees.len(), proposees, deja, noms_crees)
+    };
     if creees == 0 && proposees == 0 && deja.is_empty() {
         return Ok(("termine", "Rien de nouveau : ces notions sont déjà dans ton vault.".into()));
     }
@@ -324,7 +343,139 @@ importe-les en plusieurs fois."
     if !deja.is_empty() {
         message.push_str(&format!(" ; déjà présentes, non remplacées : {}", deja.join(", ")));
     }
+
+    // 4. Fiche de synthèse du chapitre. Un échec ici ne défait pas les notes déjà écrites.
+    if creees > 0 {
+        match fiche_du_chapitre(etat, &redacteur, &requete, &racine, &dossier, &reperage.matiere, &noms_crees, id, &cree_le).await {
+            Ok(Some(m)) => message.push_str(&format!(" ; {m}")),
+            Ok(None) => {}
+            Err(e) => message.push_str(&format!(" ; fiche de synthèse non mise à jour ({e})")),
+        }
+    }
     Ok(("termine", message))
+}
+
+/// Notes du chapitre lues sur le disque (les nouvelles ne sont pas encore indexées) : (nom, chemin), sans dessins.
+fn notes_du_chapitre(racine: &Path, dossier: &str) -> Vec<(String, String)> {
+    let Ok(entrees) = std::fs::read_dir(racine.join(dossier)) else { return Vec::new() };
+    let mut notes: Vec<(String, String)> = entrees
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .filter(|n| n.to_lowercase().ends_with(".md") && !n.to_lowercase().ends_with(".excalidraw.md"))
+        .map(|n| (n.trim_end_matches(".md").to_string(), format!("{dossier}/{n}")))
+        .collect();
+    notes.sort();
+    notes
+}
+
+/// 4. La fiche de synthèse du chapitre où des notes viennent d'être ajoutées : créée si le chapitre n'en a pas
+/// (au moins 2 notes, hors langues étrangères), sinon complétée par l'IA et PROPOSÉE à l'élève (une note
+/// existante n'est modifiée qu'avec son accord). Renvoie un morceau du message du lot.
+#[allow(clippy::too_many_arguments)]
+async fn fiche_du_chapitre(
+    etat: &Etat,
+    redacteur: &Redacteur,
+    requete: &Requete,
+    racine: &Path,
+    dossier: &str,
+    matiere: &str,
+    nouvelles: &[String],
+    lot: i64,
+    cree_le: &str,
+) -> Result<Option<String>, String> {
+    // Notes rangées directement dans la matière : pas de chapitre, pas de fiche.
+    let Some((_, chapitre)) = dossier.rsplit_once('/') else { return Ok(None) };
+    if crate::cartes::vocabulaire::matiere_de_langue(Some(matiere)) {
+        return Ok(None);
+    }
+    let notes = notes_du_chapitre(racine, dossier);
+    let fiche = notes.iter().find(|(_, c)| ia_photos::est_fiche(c)).map(|(_, c)| c.clone());
+    let cours: Vec<&(String, String)> = notes.iter().filter(|(_, c)| !ia_photos::est_fiche(c)).collect();
+    if fiche.is_none() && cours.len() < 2 {
+        return Ok(None);
+    }
+    // Les nouvelles notes en entier, les autres coupées pour tenir dans un appel.
+    let couper = |t: String, max: usize| if t.chars().count() > max { t.chars().take(max).collect::<String>() + "\n[…]" } else { t };
+    let longueur = if cours.len() > 12 { 1500 } else { 3500 };
+    let mut contenus = Vec::new();
+    for (nom, chemin) in &cours {
+        let Ok(t) = vault::lire_texte(racine, chemin) else { continue };
+        let max = if nouvelles.contains(nom) { 10_000 } else { longueur };
+        contenus.push((nom.clone(), couper(t, max)));
+    }
+    let actuelle = match &fiche {
+        Some(c) => Some(vault::lire_texte(racine, c)?),
+        None => None,
+    };
+    let exemple = if actuelle.is_none() {
+        let conn = etat.db.lock().unwrap();
+        let chemin: Option<String> = conn
+            .query_row(
+                "SELECT chemin FROM notes WHERE genre = 'fiche_synthese' ORDER BY (matiere = ?1) DESC, modifie DESC LIMIT 1",
+                [matiere],
+                |r| r.get(0),
+            )
+            .ok();
+        drop(conn);
+        chemin.and_then(|c| vault::lire_texte(racine, &c).ok()).map(|t| couper(t, 4000))
+    } else {
+        None
+    };
+    let nouvelles = match &actuelle {
+        Some(f) => ia_photos::notes_a_ajouter(f, &cours.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(), nouvelles),
+        None => nouvelles.to_vec(),
+    };
+    let contexte = ia_photos::ContexteFiche {
+        matiere: matiere.to_string(),
+        chapitre: chapitre.to_string(),
+        notes: contenus,
+        nouvelles: nouvelles.clone(),
+        fiche: actuelle.clone(),
+        exemple,
+    };
+    let requete = Requete {
+        parties: vec![Partie::Texte(ia_photos::consigne_fiche(&contexte))],
+        schema: Some(ia_photos::schema_fiche()),
+        temperature: Some(0.3),
+        ..requete.clone()
+    };
+    let (redigee, _): (ia_photos::FicheRedigee, String) =
+        demander(etat, redacteur, &requete, |f| ia_photos::valider_fiche(f, &contexte)).await?;
+    let titres: Vec<&str> = nouvelles.iter().map(String::as_str).collect();
+
+    let conn = etat.db.lock().unwrap();
+    match (fiche, actuelle) {
+        (Some(chemin), Some(avant)) => {
+            let apres = ia_photos::corriger_liens(&ia_photos::retablir_sauts_de_ligne(&redigee.contenu), &titres);
+            let raison = if redigee.raison.trim().is_empty() {
+                "Fiche de synthèse complétée avec les nouvelles notes du chapitre.".to_string()
+            } else {
+                format!("Fiche de synthèse : {}", redigee.raison.trim())
+            };
+            conn.execute(
+                "INSERT INTO propositions_vault(date, lot_id, chemin, avant, apres, raison) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![maintenant_ms(), lot, chemin, avant.as_bytes(), apres, raison],
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(Some("fiche de synthèse complétée, à valider".into()))
+        }
+        _ => {
+            let ctx = ecriture::Contexte {
+                racine,
+                autorisee: etat.reglages.lock().unwrap().ecriture_autorisee,
+                origine: "photos",
+                lot_id: Some(lot),
+                raison: Some("Fiche de synthèse du chapitre"),
+                maintenant: maintenant_ms(),
+                groupe: None,
+            };
+            let chemin = format!("{dossier}/{}.md", ia_photos::titre_fiche(chapitre));
+            let texte = ia_photos::corriger_liens(&ia_photos::fiche_complete(&redigee.contenu, cree_le), &titres);
+            ecriture::creer(&conn, &ctx, &chemin, &texte)?;
+            Ok(Some("fiche de synthèse du chapitre créée".into()))
+        }
+    }
 }
 
 /// Qui rédige les notes : Gemini, ou une extension installée à qui les photos sont passées en fichiers.

@@ -21,8 +21,10 @@ static RE_PUCE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(?:[-*+]|\d+[.)
 /// Abréviations suivies d'un point qui ne terminent pas une phrase.
 const ABREVIATIONS: &[&str] = &["ex", "cf", "etc", "env", "av", "apr", "chap", "p", "fig", "doc", "n°", "vol", "éd", "mme", "m", "dr", "st", "ste"];
 
+/// Les fiches de synthèse servent à relire : leurs cartes feraient doublon avec celles des notes du chapitre
+/// (choix de l'élève, 19/11/2026).
 pub fn est_source(note: &NoteSource) -> bool {
-    !matches!(note.genre.as_str(), "vocabulaire" | "schema" | "accueil" | "revision")
+    !matches!(note.genre.as_str(), "vocabulaire" | "schema" | "accueil" | "revision" | "fiche_synthese")
 }
 
 pub fn cartes(note: &NoteSource, sections: &[SectionSource]) -> Vec<CarteGeneree> {
@@ -198,7 +200,7 @@ mod tests {
         let c = cartes(&note("cours"), &[def.clone(), exemple.clone()]);
         assert_eq!(c.iter().map(|x| x.reponse.as_str()).collect::<Vec<_>>(), vec!["mutation"]);
         assert_eq!(c[0].section, "Définition");
-        // Dans une fiche de synthèse, toutes les sections comptent.
-        assert_eq!(cartes(&note("fiche_synthese"), &[def, exemple]).len(), 2);
+        // Une fiche de synthèse ne donne aucune carte (doublons avec les notes du chapitre).
+        assert!(!est_source(&note("fiche_synthese")));
     }
 }
